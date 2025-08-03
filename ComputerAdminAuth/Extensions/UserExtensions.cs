@@ -1,6 +1,7 @@
 ﻿using ComputerAdminAuth.Data.Context;
 using ComputerAdminAuth.Data.Extension;
 using ComputerAdminAuth.Entities;
+using ComputerAdminAuth.Identity;
 using ComputerAdminAuth.Service;
 using Duende.IdentityServer.Models;
 using Microsoft.AspNetCore.Identity;
@@ -33,8 +34,10 @@ public static class UserExtensions
             options.Caching.ClientStoreExpiration = TimeSpan.FromMinutes(30);
             options.Authentication.CookieSlidingExpiration = true;
             options.Authentication.CoordinateClientLifetimesWithUserSession = true;
+            options.Authentication.CookieSameSiteMode = SameSiteMode.None;
         })
         .AddAspNetIdentity<UserEntity>()
+        .AddExtensionGrantValidator<TelegramGrantValidator>()
         .AddInMemoryIdentityResources(GetIdentityResources())
         .AddInMemoryApiResources(GetApiResources())
         .AddInMemoryApiScopes(GetApiScopes())
@@ -70,14 +73,21 @@ public static class UserExtensions
     [
         new Client
         {
-            ClientId = "react-native-app",
-            AllowedGrantTypes = GrantTypes.Code,
+            ClientId = "react-spa",
+            AllowedGrantTypes =
+            {
+                GrantType.AuthorizationCode,
+                "telegram_login"
+            },            
             RequirePkce = true,
             RequireClientSecret = false,
 
-            RedirectUris = { "https://dns.ava-kk.com/admin/callback" },
-            PostLogoutRedirectUris = { "https://dns.ava-kk.com/admin/logout-callback" },
-            AllowedCorsOrigins = { "http://localhost", "https://dns.ava-kk.com" },
+            RedirectUris = { 
+                "https://admin.ava-kk.ru/callback",
+                "https://admin.ava-kk.ru/silent-callback.html"
+            },
+            PostLogoutRedirectUris = { "https://admin.ava-kk.ru/logout-callback" },
+            AllowedCorsOrigins = { "https://admin.ava-kk.ru" },
 
             AllowedScopes = { "openid", "profile", "api" },
             AllowOfflineAccess = true,
@@ -85,13 +95,6 @@ public static class UserExtensions
             RefreshTokenUsage = TokenUsage.OneTimeOnly,
             RefreshTokenExpiration = TokenExpiration.Absolute,
             SlidingRefreshTokenLifetime = 2592000
-        },
-        new Client
-        {
-            ClientId = "telegram-introspection",
-            ClientSecrets = { new Secret("super-secret".Sha256()) },
-            AllowedGrantTypes = GrantTypes.ClientCredentials,
-            AllowedScopes = { "api" }
         }
     ];
 }

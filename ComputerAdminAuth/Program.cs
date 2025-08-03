@@ -1,10 +1,11 @@
 using ComputerAdminAuth.Data.Context;
 using ComputerAdminAuth.Extensions;
 using ComputerAdminAuth.Seeders;
-using Duende.IdentityServer.EntityFramework.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder();
+var services = builder.Services;
+
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -21,6 +22,7 @@ builder.Services.AddHsts(options =>
     options.IncludeSubDomains = false;
     options.Preload = true;
 });
+
 builder.WebHost.UseKestrel(opt =>
 {
     opt.ListenLocalhost(5001, listen =>
@@ -32,8 +34,11 @@ builder.WebHost.UseKestrel(opt =>
 var app = builder.Build();
 
 app.UseForwardedHeaders();
-
-app.UsePathBase("/auth");
+app.UseCookiePolicy(new CookiePolicyOptions
+{
+    MinimumSameSitePolicy = SameSiteMode.None,
+    Secure = CookieSecurePolicy.Always
+});
 
 app.UseHttpsRedirection();
 app.UseHsts();
@@ -48,8 +53,6 @@ app.UseIdentityServer();   // уже есть у тебя
 
 app.MapDefaultControllerRoute(); // если используешь контроллеры
 app.MapRazorPages();
-
-app.UseStaticFiles();
 
 using (var scope = app.Services.CreateScope())
 {
