@@ -1,80 +1,108 @@
-﻿using Duende.IdentityServer.EntityFramework.DbContexts;
+﻿// Seeders/IdentityServerSeeder.cs
+using ComputerAdminAuth.Extensions;
+using ComputerAdminAuth.Services;
+using Duende.IdentityModel;
+using Duende.IdentityServer.EntityFramework.DbContexts;
 using Duende.IdentityServer.EntityFramework.Mappers;
 using Duende.IdentityServer.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace ComputerAdminAuth.Seeders;
 
 public static class IdentityServerSeeder
 {
-    public static async Task SeedAsync(IServiceProvider serviceProvider)
+    public static async Task SeedAsync(IServiceProvider sp)
     {
-        var configDb = serviceProvider.GetRequiredService<ConfigurationDbContext>();
+        using var scope = sp.CreateScope();
+        var ctx = scope.ServiceProvider.GetRequiredService<ConfigurationDbContext>();
 
-        if (!configDb.IdentityResources.Any())
+        if (!ctx.Clients.Any())
         {
-            var resources = new IdentityResource[]
-            {
-                new IdentityResources.OpenId(),
-                new IdentityResources.Profile()
-            };
-
-            foreach (var res in resources)
-                await configDb.IdentityResources.AddAsync(res.ToEntity());
+            ctx.Clients.Add(
+                GetClients()
+                              .First()              // ← ваш react-spa
+                              .ToEntity());
         }
 
-        if (!configDb.ApiScopes.Any())
+        if (!ctx.IdentityResources.Any())
         {
-            var scopes = new ApiScope[]
-            {
-                new("api", "Full access to Computer Club API"),
-                new("api:read", "Read-only access"),
-                new("api:write", "Write access")
-            };
-
-            foreach (var scopeItem in scopes)
-                await configDb.ApiScopes.AddAsync(scopeItem.ToEntity());
+            ctx.IdentityResources.AddRange(
+                GetIdentityResources()  // static методы выше
+                              .Select(r => r.ToEntity()));
         }
 
-        // по желанию
-        if (!configDb.ApiResources.Any())
+        if (!ctx.ApiScopes.Any())
         {
-            var apiResource = new ApiResource("computerclub_api", "Computer Club API")
-            {
-                Scopes = { "api", "api:read", "api:write" }
-            };
-
-            await configDb.ApiResources.AddAsync(apiResource.ToEntity());
+            ctx.ApiScopes.AddRange(
+                GetApiScopes()
+                              .Select(s => s.ToEntity()));
         }
 
-        await configDb.SaveChangesAsync();
+        if (!ctx.ApiResources.Any())
+        {
+            ctx.ApiResources.AddRange(
+                GetApiResources()
+                              .Select(r => r.ToEntity()));
+        }
+
+        await ctx.SaveChangesAsync();
     }
-    public static async Task SeedClientsAsync(IServiceProvider provider)
-    {
-        var context = provider.GetRequiredService<ConfigurationDbContext>();
+    private static IEnumerable<IdentityResource> GetIdentityResources() =>
+    [
+        new IdentityResources.OpenId(),
+        new IdentityResources.Profile(),
+        new IdentityResource(
+        name:     "telegram",
+        displayName: "Telegram profile",
+        userClaims:
+        [
+            CustomClaimTypes.TelegramId,
+            CustomClaimTypes.TelegramUsername,
+            CustomClaimTypes.TelegramLinked,
+            JwtClaimTypes.Picture
+        ])
+    ];
 
-        if (!await context.Clients.AnyAsync(c => c.ClientId == "react-native-app"))
+    private static IEnumerable<ApiScope> GetApiScopes() =>
+    [
+        new ApiScope("api", "Full access to Computer Club API"),
+        new ApiScope("api:read", "Read-only access"),
+        new ApiScope("api:write", "Write access")
+    ];
+
+    private static IEnumerable<ApiResource> GetApiResources() =>
+    [
+        new ApiResource("computerclub_api", "Computer Club API")
         {
-            var client = new Client
-            {
-                ClientId = "react-native-app",
-                AllowedGrantTypes = GrantTypes.Code,
-                RequirePkce = true,
-                RequireClientSecret = false,
-                RedirectUris = { "computerclub-auth-tester://oauth/callback" },
-                PostLogoutRedirectUris = { "computerclub-auth-tester://oauth/logout-callback" },
-                AllowedCorsOrigins = { "http://localhost", "https://dns.ava-kk.com" },
-                AllowedScopes = { "openid", "profile", "api" },
-                AllowOfflineAccess = true,
-                AccessTokenLifetime = 3600,
-                RefreshTokenUsage = TokenUsage.OneTimeOnly,
-                RefreshTokenExpiration = TokenExpiration.Absolute,
-                SlidingRefreshTokenLifetime = 2592000
-            };
-
-            var entity = client.ToEntity();
-            await context.Clients.AddAsync(entity);
-            await context.SaveChangesAsync();
+            Scopes = { "api", "api:read", "api:write" }
         }
-    }
+    ];
+
+    private static IEnumerable<Client> GetClients() =>
+    [
+        new Client
+        {
+            ClientId = "react-spa",
+            AllowedGrantTypes =
+            {
+                GrantType.AuthorizationCode,
+                "telegram_login"
+            },
+            RequirePkce = true,
+            RequireClientSecret = false,
+
+            RedirectUris = {
+                "https://admin.ava-kk.ru/callback",
+                "https://admin.ava-kk.ru/silent-callback.html"
+            },
+            PostLogoutRedirectUris = { "https://admin.ava-kk.ru/logout-callback" },
+            AllowedCorsOrigins = { "https://admin.ava-kk.ru" },
+
+            AllowedScopes = { "openid", "profile", "api" },
+            AllowOfflineAccess = true,
+            AccessTokenLifetime = 3600,
+            RefreshTokenUsage = TokenUsage.OneTimeOnly,
+            RefreshTokenExpiration = TokenExpiration.Absolute,
+            SlidingRefreshTokenLifetime = 2592000
+        }
+    ];
 }

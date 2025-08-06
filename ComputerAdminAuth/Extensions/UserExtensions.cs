@@ -2,9 +2,9 @@
 using ComputerAdminAuth.Data.Extension;
 using ComputerAdminAuth.Entities;
 using ComputerAdminAuth.Identity;
-using ComputerAdminAuth.Service;
-using Duende.IdentityServer.Models;
+using ComputerAdminAuth.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace ComputerAdminAuth.Extensions;
 
@@ -36,65 +36,27 @@ public static class UserExtensions
             options.Authentication.CoordinateClientLifetimesWithUserSession = true;
             options.Authentication.CookieSameSiteMode = SameSiteMode.None;
         })
+        .AddConfigurationStore(opt =>
+        {
+            opt.ConfigureDbContext = b =>
+                b.UseNpgsql(config.GetConnectionString("DefaultConnection"),
+                            sql => sql.MigrationsAssembly(typeof(UserExtensions).Assembly.FullName));
+        })
+        .AddOperationalStore(opt =>
+        {
+            opt.ConfigureDbContext = b =>
+                b.UseNpgsql(config.GetConnectionString("DefaultConnection"),
+                            sql => sql.MigrationsAssembly(typeof(UserExtensions).Assembly.FullName));
+
+            // автоматическая очистка токенов/код-авт. по расписанию
+            opt.EnableTokenCleanup = true;
+            opt.TokenCleanupInterval = 3600;   // раз в час
+        })
         .AddAspNetIdentity<UserEntity>()
         .AddExtensionGrantValidator<TelegramGrantValidator>()
-        .AddInMemoryIdentityResources(GetIdentityResources())
-        .AddInMemoryApiResources(GetApiResources())
-        .AddInMemoryApiScopes(GetApiScopes())
-        .AddInMemoryClients(GetClients())
         .AddProfileService<ProfileService>()
         .AddServerSideSessions();
 
         return services;
     }
-
-    private static IEnumerable<IdentityResource> GetIdentityResources() =>
-    [
-        new IdentityResources.OpenId(),
-        new IdentityResources.Profile()
-    ];
-
-    private static IEnumerable<ApiScope> GetApiScopes() =>
-    [
-        new ApiScope("api", "Full access to Computer Club API"),
-        new ApiScope("api:read", "Read-only access"),
-        new ApiScope("api:write", "Write access")
-    ];
-
-    private static IEnumerable<ApiResource> GetApiResources() =>
-    [
-        new ApiResource("computerclub_api", "Computer Club API")
-        {
-            Scopes = { "api", "api:read", "api:write" }
-        }
-    ];
-
-    private static IEnumerable<Client> GetClients() =>
-    [
-        new Client
-        {
-            ClientId = "react-spa",
-            AllowedGrantTypes =
-            {
-                GrantType.AuthorizationCode,
-                "telegram_login"
-            },            
-            RequirePkce = true,
-            RequireClientSecret = false,
-
-            RedirectUris = { 
-                "https://admin.ava-kk.ru/callback",
-                "https://admin.ava-kk.ru/silent-callback.html"
-            },
-            PostLogoutRedirectUris = { "https://admin.ava-kk.ru/logout-callback" },
-            AllowedCorsOrigins = { "https://admin.ava-kk.ru" },
-
-            AllowedScopes = { "openid", "profile", "api" },
-            AllowOfflineAccess = true,
-            AccessTokenLifetime = 3600,
-            RefreshTokenUsage = TokenUsage.OneTimeOnly,
-            RefreshTokenExpiration = TokenExpiration.Absolute,
-            SlidingRefreshTokenLifetime = 2592000
-        }
-    ];
 }

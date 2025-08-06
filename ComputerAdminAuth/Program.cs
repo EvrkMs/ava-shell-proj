@@ -1,39 +1,43 @@
+п»ї// Program.cs
 using ComputerAdminAuth.Data.Context;
 using ComputerAdminAuth.Extensions;
 using ComputerAdminAuth.Seeders;
+using Duende.IdentityServer.EntityFramework.DbContexts;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplication.CreateBuilder();
+var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
+var cfg = builder.Configuration;
 
-
-builder.Services.ConfigureApplicationCookie(options =>
+/* ---------- Cookie + Bearer ---------- */
+services.ConfigureApplicationCookie(o =>
 {
-    options.LoginPath = "/Account/Login"; // путь до твоей Razor Page
-    options.LogoutPath = "/Account/logout";
+    o.LoginPath = "/Account/Login";
+    o.LogoutPath = "/Account/Logout";
 });
 
-builder.Services.AddUserServices(builder.Configuration);
-builder.Logging.AddConsole();
-builder.Services.AddRazorPages();
-builder.Services.AddAntiforgery();
-builder.Services.AddHsts(options =>
-{
-    options.IncludeSubDomains = false;
-    options.Preload = true;
-});
+/* ---------- РЅР°С€Рё СЃРµСЂРІРёСЃС‹ (Identity + IdentityServer + EF-stores) ---------- */
+services.AddUserServices(cfg);
 
-builder.WebHost.UseKestrel(opt =>
+services.AddRazorPages();
+services.AddControllers();           // api/telegram/*
+services.AddAntiforgery();
+services.AddHsts(o => { o.IncludeSubDomains = true; o.Preload = true; });
+
+builder.WebHost.UseKestrel(o =>
 {
-    opt.ListenLocalhost(5001, listen =>
-    {
-        listen.UseHttps();
-    });
+    o.ListenLocalhost(5001, l => l.UseHttps());
 });
 
 var app = builder.Build();
 
-app.UseForwardedHeaders();
+/* ---------- Middleware pipeline ---------- */
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 app.UseCookiePolicy(new CookiePolicyOptions
 {
     MinimumSameSitePolicy = SameSiteMode.None,
@@ -43,28 +47,26 @@ app.UseCookiePolicy(new CookiePolicyOptions
 app.UseHttpsRedirection();
 app.UseHsts();
 
-app.UseAntiforgery();
-
 app.UseRouting();
-app.UseAuthentication();   // обязательно для Identity
-app.UseAuthorization();    // обязательно для Razor Pages
 
-app.UseIdentityServer();   // уже есть у тебя
+app.UseAuthentication();            // в‘Ў JWT / Cookie
+app.UseAuthorization();
 
-app.MapDefaultControllerRoute(); // если используешь контроллеры
+app.UseIdentityServer();            // в‘ў endpoints /.well-known, /connect/*
+app.MapControllers();
 app.MapRazorPages();
 
+/* ---------- РјРёРіСЂР°С†РёРё + СЃРёРґС‹ ---------- */
 using (var scope = app.Services.CreateScope())
 {
-    var provider = scope.ServiceProvider;
-    await provider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
-    //await provider.GetRequiredService<PersistedGrantDbContext>().Database.MigrateAsync();
-    //await provider.GetRequiredService<ConfigurationDbContext>().Database.MigrateAsync();
+    var sp = scope.ServiceProvider;
+    await sp.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    await sp.GetRequiredService<ConfigurationDbContext>().Database.MigrateAsync();
+    await sp.GetRequiredService<PersistedGrantDbContext>().Database.MigrateAsync();
 
-    //await IdentityServerSeeder.SeedAsync(provider);
-    //await IdentityServerSeeder.SeedClientsAsync(provider);
-    await UserEntityDefaultSeeder.SeedAsync(provider);
-    await RoleSeeder.SeedAsync(provider);
+    await IdentityServerSeeder.SeedAsync(sp);          // РєР»РёРµРЅС‚С‹ / СЃРєРѕСѓРїС‹ / СЂРµСЃСѓСЂСЃС‹
+    await UserEntityDefaultSeeder.SeedAsync(sp);       // РІР°С€ РґРµС„РѕР»С‚-РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ
+    await RoleSeeder.SeedAsync(sp);                    // СЂРѕР»Рё
 }
 
 app.Run();

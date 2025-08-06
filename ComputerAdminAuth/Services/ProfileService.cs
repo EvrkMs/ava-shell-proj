@@ -7,7 +7,7 @@ using Duende.IdentityServer.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace ComputerAdminAuth.Service;
+namespace ComputerAdminAuth.Services;
 
 public class ProfileService(UserManager<UserEntity> users, AppDbContext db) : IProfileService
 {
@@ -42,7 +42,6 @@ public class ProfileService(UserManager<UserEntity> users, AppDbContext db) : IP
         if (telegram is not null)
         {
             ctx.IssuedClaims.AddRange([
-                new Claim(CustomClaimTypes.TelegramId,     telegram.TelegramId.ToString()),
                 new Claim(CustomClaimTypes.TelegramLinked, "true")
             ]);
         }
@@ -61,4 +60,5 @@ public static class CustomClaimTypes
 {
     public const string TelegramId = "telegram_id";
     public const string TelegramLinked = "telegram_linked";
+    public const string TelegramUsername = "telegram_username";
 }
