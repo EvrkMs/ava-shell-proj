@@ -11,5 +11,7 @@ public class TelegramConfiguration : IEntityTypeConfiguration<TelegramEntity>
         builder.HasOne(t => t.User)
             .WithOne()
             .HasForeignKey<TelegramEntity>(t => t.UserId);
+
+        builder.HasIndex(t => t.TelegramId).IsUnique();
     }
 }

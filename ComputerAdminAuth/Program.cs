@@ -1,4 +1,5 @@
 ﻿// Program.cs
+using System.Net;
 using ComputerAdminAuth.Data.Context;
 using ComputerAdminAuth.Extensions;
 using ComputerAdminAuth.Seeders;
@@ -20,7 +21,17 @@ services.ConfigureApplicationCookie(o =>
 });
 
 services.AddLocalApiAuthentication();
-
+services.AddAuthentication(o =>
+{
+    o.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    o.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(o =>
+{
+    o.Authority = "https://auth.ava-kk.ru";          // твой issuer
+    o.Audience = "computerclub_api";                // как в ApiResource
+    o.RequireHttpsMetadata = true;
+});
 /* ---------- наши сервисы (Identity + IdentityServer + EF-stores) ---------- */
 services.AddUserServices(cfg);
 
@@ -31,7 +42,7 @@ services.AddHsts(o => { o.IncludeSubDomains = true; o.Preload = true; });
 
 builder.WebHost.UseKestrel(o =>
 {
-    o.ListenLocalhost(5001, l => l.UseHttps());
+    o.ListenAnyIP(5001, l => l.UseHttps());
 });
 
 builder.Services.AddCors(o => o.AddPolicy("spa", p => p
@@ -46,8 +57,9 @@ var app = builder.Build();
 /* ---------- Middleware pipeline ---------- */
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    KnownProxies = { IPAddress.Parse("192.168.88.91") }
+}); 
 app.UseCookiePolicy(new CookiePolicyOptions
 {
     MinimumSameSitePolicy = SameSiteMode.None,
@@ -61,11 +73,12 @@ app.UseRouting();
 
 app.UseCors("spa");
 
+app.UseIdentityServer();            // ③ endpoints /.well-known, /connect/*
+
 app.UseAuthentication();            // ② JWT / Cookie
 app.UseAuthorization();
 
-app.UseIdentityServer();            // ③ endpoints /.well-known, /connect/*
-app.MapControllers();
+app.MapControllers().RequireAuthorization("ApiWrite");
 app.MapRazorPages();
 /* ---------- миграции + сиды ---------- */
 using (var scope = app.Services.CreateScope())

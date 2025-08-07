@@ -29,6 +29,7 @@ public static class UserExtensions
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
 
+
         services.AddIdentityServer(options =>
         {
             options.Caching.ClientStoreExpiration = TimeSpan.FromMinutes(30);
@@ -52,6 +53,7 @@ public static class UserExtensions
             opt.EnableTokenCleanup = true;
             opt.TokenCleanupInterval = 3600;   // раз в час
         })
+        .AddDeveloperSigningCredential()
         .AddAspNetIdentity<UserEntity>()
         .AddExtensionGrantValidator<TelegramGrantValidator>()
         .AddProfileService<ProfileService>()

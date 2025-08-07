@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 [ApiController, Route("api/telegram")]
 [IgnoreAntiforgeryToken]
-[Authorize(Policy = IdentityServerConstants.LocalApi.PolicyName)]
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class TelegramController(
         AppDbContext db,
         IConfiguration cfg,

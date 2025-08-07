@@ -39,10 +39,15 @@ public class ProfileService(UserManager<UserEntity> users, AppDbContext db) : IP
                                 .AsNoTracking()
                                 .FirstOrDefaultAsync(t => t.UserId == user.Id);
 
+        // ProfileService: при наличии telegram
         if (telegram is not null)
         {
-            ctx.IssuedClaims.AddRange([
-                new Claim(CustomClaimTypes.TelegramLinked, "true")
+            ctx.IssuedClaims.AddRange(
+            [
+                new Claim(CustomClaimTypes.TelegramLinked, "true"),
+                new Claim(CustomClaimTypes.TelegramId, telegram.TelegramId.ToString()),
+                new Claim(CustomClaimTypes.TelegramUsername, telegram.Username ?? string.Empty),
+                new Claim(JwtClaimTypes.Picture, telegram.PhotoUrl ?? string.Empty),
             ]);
         }
         else

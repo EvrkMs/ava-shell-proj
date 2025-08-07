@@ -101,7 +101,7 @@ public static class IdentityServerSeeder
             AllowOfflineAccess = true,
             AccessTokenLifetime = 3600,
             RefreshTokenUsage = TokenUsage.OneTimeOnly,
-            RefreshTokenExpiration = TokenExpiration.Absolute,
+            RefreshTokenExpiration = TokenExpiration.Sliding,
             SlidingRefreshTokenLifetime = 2592000
         }
     ];
