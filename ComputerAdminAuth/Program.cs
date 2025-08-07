@@ -6,6 +6,7 @@ using Duende.IdentityServer.EntityFramework.DbContexts;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
@@ -17,6 +18,8 @@ services.ConfigureApplicationCookie(o =>
     o.LoginPath = "/Account/Login";
     o.LogoutPath = "/Account/Logout";
 });
+
+services.AddLocalApiAuthentication();
 
 /* ---------- наши сервисы (Identity + IdentityServer + EF-stores) ---------- */
 services.AddUserServices(cfg);
@@ -30,6 +33,13 @@ builder.WebHost.UseKestrel(o =>
 {
     o.ListenLocalhost(5001, l => l.UseHttps());
 });
+
+builder.Services.AddCors(o => o.AddPolicy("spa", p => p
+    .WithOrigins("https://admin.ava-kk.ru")
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials() // не обязательно, если без cookies
+));
 
 var app = builder.Build();
 
@@ -49,13 +59,14 @@ app.UseHsts();
 
 app.UseRouting();
 
+app.UseCors("spa");
+
 app.UseAuthentication();            // ② JWT / Cookie
 app.UseAuthorization();
 
 app.UseIdentityServer();            // ③ endpoints /.well-known, /connect/*
 app.MapControllers();
 app.MapRazorPages();
-
 /* ---------- миграции + сиды ---------- */
 using (var scope = app.Services.CreateScope())
 {

@@ -1,21 +1,19 @@
 ﻿namespace ComputerAdminAuth.Controller;
 
 using System.Security.Claims;
-
-// Controllers/TelegramController.cs
 using ComputerAdminAuth.Data.Context;
 using ComputerAdminAuth.Entities;
 using ComputerAdminAuth.Helpers;
-using ComputerAdminAuth.Services;
 using Duende.IdentityModel;
+using Duende.IdentityServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 [ApiController, Route("api/telegram")]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]// ⬅️ Bearer-токен обязателен
 [IgnoreAntiforgeryToken]
+[Authorize(Policy = IdentityServerConstants.LocalApi.PolicyName)]
 public class TelegramController(
         AppDbContext db,
         IConfiguration cfg,
