@@ -1,18 +1,16 @@
-using System;
 using System.Text.Encodings.Web;
-using System.Threading.Tasks;
 using Auth.Application.UseCases.Telegram;
 using Auth.Shared.Contracts;
-using Duende.IdentityModel;
 using Duende.IdentityServer.Extensions;
 using Duende.IdentityServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
-namespace Auth.Host.Pages.Account;
+namespace Auth.Host.Pages.Account.Telegram;
 
 [Authorize]
+[ValidateAntiForgeryToken]
 public class TelegramBindModel : PageModel
 {
     private readonly BindTelegramCommand _bindTelegram;
@@ -40,7 +38,6 @@ public class TelegramBindModel : PageModel
 
     public void OnGet() { }
 
-    // GET /Account/TelegramBind?handler=Verify&...payload...
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> OnGetVerifyAsync(
     string id, string first_name, string last_name, string username,

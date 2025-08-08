@@ -1,43 +1,45 @@
-﻿using System.Globalization;
-using Auth.Domain.Entities;
+﻿using Auth.Application.Interfaces; // ITelegramAuthVerifier
+using Auth.Infrastructure; // CustomSignInManager
+using Auth.Infrastructure.Data; // AppDbContext
 using Auth.Infrastructure.Telegram; // TelegramAuthOptions
 using Auth.Shared.Contracts;
 using Duende.IdentityServer.Services;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
-using Auth.Infrastructure.Data; // ваш DbContext
-using Auth.Application.Interfaces; // ITelegramAuthVerifier
-using Microsoft.AspNetCore.Authorization;
 
-namespace Auth.Host.Pages.Account;
+namespace Auth.Host.Pages.Account.Telegram;
 
 [AllowAnonymous]
-[IgnoreAntiforgeryToken] // виджет идёт GET без антифорджери
+[IgnoreAntiforgeryToken]               // виджет шлёт GET без антифорджери
+[ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
 public class TelegramLoginModel : PageModel
 {
     private readonly AppDbContext _db;
-    private readonly SignInManager<UserEntity> _signInManager;
+    private readonly CustomSignInManager _signInManager;
     private readonly IIdentityServerInteractionService _interaction;
     private readonly ITelegramAuthVerifier _verifier;
     private readonly TelegramAuthOptions _opts;
+    private readonly ILogger<TelegramLoginModel> _log;
 
     public TelegramLoginModel(
         AppDbContext db,
-        SignInManager<UserEntity> signInManager,
+        CustomSignInManager signInManager,
         IIdentityServerInteractionService interaction,
         ITelegramAuthVerifier verifier,
-        TelegramAuthOptions opts)
+        TelegramAuthOptions opts,
+        ILogger<TelegramLoginModel> log)
     {
         _db = db;
         _signInManager = signInManager;
         _interaction = interaction;
         _verifier = verifier;
         _opts = opts;
+        _log = log;
     }
 
-    // Модель для биндинга QueryString от виджета
+    // Прямой биндинг query от виджета + наш returnUrl
     public class TelegramQuery
     {
         [FromQuery(Name = "id")] public long Id { get; set; }
@@ -48,27 +50,36 @@ public class TelegramLoginModel : PageModel
         [FromQuery(Name = "auth_date")] public long AuthDate { get; set; }
         [FromQuery(Name = "hash")] public string Hash { get; set; } = string.Empty;
 
+        // возвращаемся обратно в OIDC authorize (или домашку), если было
         [FromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
     }
 
     public async Task<IActionResult> OnGetAsync([FromQuery] TelegramQuery q)
     {
-        // 1) Мини-валидация
+        // 1) sanity-check
         if (q.Id <= 0 || q.AuthDate <= 0 || string.IsNullOrWhiteSpace(q.Hash))
         {
+            _log.LogWarning("TelegramLogin: missing fields (id={id}, auth_date={auth}, hash?={hash})",
+                q.Id, q.AuthDate, !string.IsNullOrEmpty(q.Hash));
             return RedirectToPage("Login", new { returnUrl = q.ReturnUrl, error = "missing fields" });
         }
 
-        // 2) TTL
+        // 2) TTL с допуском
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var delta = Math.Abs(now - q.AuthDate);
-        var skew = Math.Max(5, _opts.AllowedClockSkewSeconds); // защита от нулей
-        if (delta > skew)
+        var skew = Math.Max(5, _opts.AllowedClockSkewSeconds);
+        if (Math.Abs(now - q.AuthDate) > skew)
         {
+            _log.LogWarning("TelegramLogin: stale request Δ={delta}s > {skew}s", Math.Abs(now - q.AuthDate), skew);
             return RedirectToPage("Login", new { returnUrl = q.ReturnUrl, error = "stale request" });
         }
 
-        // 3) Проверка подписи
+        // 3) Подпись
+        if (string.IsNullOrWhiteSpace(_opts.BotToken))
+        {
+            _log.LogError("TelegramLogin: BotToken is not configured");
+            return RedirectToPage("Login", new { returnUrl = q.ReturnUrl, error = "server misconfigured" });
+        }
+
         var raw = new TelegramRawData(
             Id: q.Id,
             Username: string.IsNullOrWhiteSpace(q.Username) ? null : q.Username,
@@ -79,31 +90,48 @@ public class TelegramLoginModel : PageModel
             Hash: q.Hash
         );
 
-        if (string.IsNullOrWhiteSpace(_opts.BotToken) || !_verifier.Verify(raw, _opts.BotToken))
+        if (!_verifier.Verify(raw, _opts.BotToken))
         {
+            _log.LogWarning("TelegramLogin: bad signature for id={id}", q.Id);
             return RedirectToPage("Login", new { returnUrl = q.ReturnUrl, error = "bad signature" });
         }
 
-        // 4) Ищем привязку TG→User
         var tg = await _db.TelegramEntities
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TelegramId == q.Id);
 
         if (tg?.User is null || !tg.User.IsActive)
         {
-            // Пользователь не найден — можно редиректить на bind-поток или показать ошибку
             return RedirectToPage("Login", new { returnUrl = q.ReturnUrl, error = "user not found" });
         }
 
-        // 5) Логиним: создаём auth cookie
+        // >>> ДО SignInAsync – вставь проверку <<<
+        if (tg.User is { } u && u.MustChangePassword) // имя свойства подставь своё
+        {
+            var safeReturn = (!string.IsNullOrWhiteSpace(q.ReturnUrl) && _interaction.IsValidReturnUrl(q.ReturnUrl))
+                ? q.ReturnUrl
+                : "/";
+
+            // уводим на анонимную ChangePassword (как делали из Login)
+            return RedirectToPage("/Account/ChangePassword", new
+            {
+                userName = u.UserName,
+                returnUrl = safeReturn,
+                requireChange = true
+            });
+        }
+
+        // 5) Вход
         await _signInManager.SignInAsync(tg.User, isPersistent: true);
 
-        // 6) Валидируем и возвращаемся в authorize-поток
+        // 6) Возврат в authorize, если там начиналось
         if (!string.IsNullOrWhiteSpace(q.ReturnUrl) && _interaction.IsValidReturnUrl(q.ReturnUrl))
         {
+            _log.LogInformation("TelegramLogin: success (userId={userId}) -> returnUrl", tg.User.Id);
             return LocalRedirect(q.ReturnUrl!);
         }
 
+        _log.LogInformation("TelegramLogin: success (userId={userId}) -> /", tg.User.Id);
         return LocalRedirect("/");
     }
 }

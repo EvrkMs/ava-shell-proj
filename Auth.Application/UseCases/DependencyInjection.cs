@@ -1,5 +1,4 @@
-﻿using Auth.Application.Interfaces;
-using Auth.Application.UseCases.Telegram;
+﻿using Auth.Application.UseCases.Telegram;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Auth.Application.UseCases;

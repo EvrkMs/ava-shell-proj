@@ -1,30 +1,28 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Auth.Domain.Entities;
+using Auth.Infrastructure; // твой CustomSignInManager
 using Duende.IdentityServer.Services;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Auth.Host.Pages.Account;
 
+[ValidateAntiForgeryToken] // окей, пусть висит на классе
 public class LoginModel : PageModel
 {
-    private readonly SignInManager<UserEntity> _signInManager;
+    private readonly CustomSignInManager _signInManager;
     private readonly IIdentityServerInteractionService _interaction;
 
-    public LoginModel(SignInManager<UserEntity> signInManager,
+    public LoginModel(CustomSignInManager signInManager,
                       IIdentityServerInteractionService interaction)
     {
         _signInManager = signInManager;
         _interaction = interaction;
     }
 
-    [BindProperty]
-    [Required(ErrorMessage = "Введите имя пользователя")]
+    [BindProperty, Required(ErrorMessage = "Введите имя пользователя")]
     public string UserName { get; set; } = string.Empty;
 
-    [BindProperty]
-    [Required(ErrorMessage = "Введите пароль")]
+    [BindProperty, Required(ErrorMessage = "Введите пароль")]
     public string Password { get; set; } = string.Empty;
 
     [BindProperty]
@@ -33,12 +31,9 @@ public class LoginModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
 
-    public void OnGet()
-    {
-        // Ничего: ReturnUrl уже будет привязан из query (?returnUrl=...)
-    }
+    [IgnoreAntiforgeryToken] // иначе GET требует токен
+    public void OnGet() { }
 
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> OnPostAsync()
     {
         if (!ModelState.IsValid)
@@ -49,20 +44,14 @@ public class LoginModel : PageModel
 
         if (result.Succeeded)
         {
-            // Безопасно: редиректим только на валидный URL от IdentityServer
-            if (!string.IsNullOrWhiteSpace(ReturnUrl) &&
-                _interaction.IsValidReturnUrl(ReturnUrl))
-            {
-                return LocalRedirect(ReturnUrl!);
-            }
+            if (!string.IsNullOrWhiteSpace(ReturnUrl) && _interaction.IsValidReturnUrl(ReturnUrl))
+                return LocalRedirect(ReturnUrl);
 
-            // Fallback: на корень, если returnUrl невалиден/отсутствует
             return LocalRedirect("/");
         }
 
         if (result.RequiresTwoFactor)
         {
-            // если позже добавишь 2FA — сюда редирект на /Account/Login2fa?ReturnUrl=... etc.
             ModelState.AddModelError(string.Empty, "Требуется двухфакторная аутентификация.");
             return Page();
         }
@@ -75,8 +64,16 @@ public class LoginModel : PageModel
 
         if (result.IsNotAllowed)
         {
-            ModelState.AddModelError(string.Empty, "Вход запрещён. Проверь подтверждение email/телефона или статус аккаунта.");
-            return Page();
+            // Форсим смену пароля: уводим на анонимную страницу ChangePassword
+            var safeReturn = (!string.IsNullOrWhiteSpace(ReturnUrl) && _interaction.IsValidReturnUrl(ReturnUrl))
+                ? ReturnUrl : "/";
+
+            return RedirectToPage("/Account/ChangePassword", new
+            {
+                userName = UserName,
+                returnUrl = safeReturn,
+                requireChange = true
+            });
         }
 
         ModelState.AddModelError(string.Empty, "Неверное имя пользователя или пароль");

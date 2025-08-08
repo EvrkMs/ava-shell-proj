@@ -1,5 +1,4 @@
-﻿using Auth.Application;
-using Auth.Application.Interfaces;
+﻿using Auth.Application.Interfaces;
 using Auth.Application.UseCases.Telegram.Utils;
 using Auth.Domain.Entities;
 using Auth.Shared.Contracts;

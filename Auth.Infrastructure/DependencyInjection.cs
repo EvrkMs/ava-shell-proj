@@ -96,6 +96,7 @@ public static class DependencyInjection
         services.AddScoped<ITelegramRepository, TelegramRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ITelegramAuthVerifier, TelegramAuthVerifier>();
+        services.AddTransient<CustomSignInManager>();
 
         return services;
     }

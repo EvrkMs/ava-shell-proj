@@ -1,8 +1,4 @@
-﻿using System.Security.Claims;
-using System.Text.Json;
-using Auth.Application.UseCases.Telegram;
-using Auth.Shared.Contracts;
-using Duende.IdentityModel;
+﻿using Auth.Application.UseCases.Telegram;
 using Duende.IdentityServer.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;

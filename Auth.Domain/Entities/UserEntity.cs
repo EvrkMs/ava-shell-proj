@@ -11,6 +11,8 @@ public class UserEntity : IdentityUser<Guid>
     public DateTime? UpdatedAt { get; set; }
 
     public bool IsActive => Status == UserStatus.Active;
+
+    public bool MustChangePassword { get; set; } = true;
 }
 
 public enum UserStatus

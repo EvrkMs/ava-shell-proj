@@ -1,0 +1,108 @@
+using System.ComponentModel.DataAnnotations;
+using Auth.Domain.Entities;
+using Duende.IdentityServer.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+
+namespace Auth.Host.Pages.Account;
+
+[AllowAnonymous]
+[ValidateAntiForgeryToken] // класс — POST будет проверяться
+public class ChangePasswordModel : PageModel
+{
+    private readonly UserManager<UserEntity> _userManager;
+    private readonly SignInManager<UserEntity> _signInManager;
+    private readonly IIdentityServerInteractionService _interaction;
+
+    public ChangePasswordModel(
+        UserManager<UserEntity> userManager,
+        SignInManager<UserEntity> signInManager,
+        IIdentityServerInteractionService interaction)
+    {
+        _userManager = userManager;
+        _signInManager = signInManager;
+        _interaction = interaction;
+    }
+
+    // Приходим сюда с логина
+    [BindProperty(SupportsGet = true)]
+    public string? UserName { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? ReturnUrl { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public bool RequireChange { get; set; }
+
+    [BindProperty, Required(ErrorMessage = "Введите текущий пароль")]
+    public string CurrentPassword { get; set; } = string.Empty;
+
+    [BindProperty, Required(ErrorMessage = "Введите новый пароль")]
+    [DataType(DataType.Password)]
+    [StringLength(100, ErrorMessage = "Пароль должен быть длиной не менее {2} символов.", MinimumLength = 6)]
+    public string NewPassword { get; set; } = string.Empty;
+
+    [BindProperty, Required(ErrorMessage = "Повторите новый пароль")]
+    [DataType(DataType.Password)]
+    [Compare(nameof(NewPassword), ErrorMessage = "Пароли не совпадают")]
+    public string ConfirmPassword { get; set; } = string.Empty;
+
+    [IgnoreAntiforgeryToken] // GET без токена
+    public void OnGet() { }
+
+    public async Task<IActionResult> OnPostAsync()
+    {
+        if (!ModelState.IsValid)
+            return Page();
+
+        if (string.IsNullOrWhiteSpace(UserName))
+        {
+            ModelState.AddModelError(string.Empty, "Не указан пользователь.");
+            return Page();
+        }
+
+        var user = await _userManager.FindByNameAsync(UserName);
+        if (user is null || !user.IsActive)
+        {
+            ModelState.AddModelError(string.Empty, "Пользователь не найден или не активен.");
+            return Page();
+        }
+
+        // Проверяем текущий пароль вручную (мы анонимны)
+        var passwordOk = await _userManager.CheckPasswordAsync(user, CurrentPassword);
+        if (!passwordOk)
+        {
+            ModelState.AddModelError(nameof(CurrentPassword), "Неверный текущий пароль.");
+            return Page();
+        }
+
+        var change = await _userManager.ChangePasswordAsync(user, CurrentPassword, NewPassword);
+        if (!change.Succeeded)
+        {
+            foreach (var e in change.Errors)
+                ModelState.AddModelError(string.Empty, e.Description);
+            return Page();
+        }
+
+        // Сбрасываем флаг MustChangePassword (если у тебя есть такое поле)
+        if (user is { })
+        {
+            var prop = user.GetType().GetProperty("MustChangePassword");
+            if (prop is not null && prop.PropertyType == typeof(bool))
+            {
+                prop.SetValue(user, false);
+                await _userManager.UpdateAsync(user);
+            }
+        }
+
+        // Теперь выполняем нормальный вход и уводим на returnUrl
+        await _signInManager.SignInAsync(user, isPersistent: false);
+
+        var safeReturn = (!string.IsNullOrWhiteSpace(ReturnUrl) && _interaction.IsValidReturnUrl(ReturnUrl))
+            ? ReturnUrl : "/";
+
+        return LocalRedirect(safeReturn);
+    }
+}

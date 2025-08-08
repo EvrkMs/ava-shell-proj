@@ -57,9 +57,9 @@ services.AddAntiforgery(o =>
     o.HeaderName = "X-CSRF-TOKEN"; // Можно передавать в AJAX-запросах
 });
 
-services.AddHsts(o => 
-{ 
-    o.IncludeSubDomains = true; 
+services.AddHsts(o =>
+{
+    o.IncludeSubDomains = true;
     o.Preload = true;
     o.MaxAge = TimeSpan.FromDays(1);
 
@@ -69,10 +69,10 @@ services.AddHsts(o =>
 // --- Kestrel ---
 builder.WebHost.UseKestrel(o =>
 {
-    o.ListenAnyIP(5001, l => 
+    o.ListenAnyIP(5001, l =>
     {
         l.UseHttps();
-    }); 
+    });
 
 });
 
