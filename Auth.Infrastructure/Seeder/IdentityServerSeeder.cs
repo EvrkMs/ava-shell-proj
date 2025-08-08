@@ -2,7 +2,7 @@
 using Duende.IdentityModel;
 using Duende.IdentityServer.Models;
 
-namespace Auth.Host.Seeder;
+namespace Auth.Infrastructure.Seeder;
 
 internal static class IdentityServerSeeder
 {

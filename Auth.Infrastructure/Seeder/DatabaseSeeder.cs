@@ -1,5 +1,4 @@
 ﻿using Auth.Domain.Entities;
-using Auth.Host.Seeder;
 using Auth.Infrastructure.Data;
 using Duende.IdentityServer.EntityFramework.DbContexts;
 using Duende.IdentityServer.EntityFramework.Mappers;
