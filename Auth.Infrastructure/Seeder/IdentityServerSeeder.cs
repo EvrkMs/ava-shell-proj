@@ -45,7 +45,6 @@ internal static class IdentityServerSeeder
             AllowedGrantTypes =
             {
                 GrantType.AuthorizationCode,
-                GrantTypesConst.TelegramLogin
             },
             RequirePkce = true,
             RequireClientSecret = false,

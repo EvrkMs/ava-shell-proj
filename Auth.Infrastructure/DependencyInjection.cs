@@ -89,7 +89,6 @@ public static class DependencyInjection
         })
         // вернуть твои кастомы, если они используются:
         .AddProfileService<ProfileService>()
-        .AddExtensionGrantValidator<TelegramGrantValidator>()
         // опционально:
         .AddServerSideSessions();
 
