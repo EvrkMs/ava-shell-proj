@@ -1,0 +1,198 @@
+﻿@page
+@using Auth.Host.Pages.Account
+@model LoginModel
+
+@{
+    ViewData["Title"] = "Вход в систему";
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Computer Club Auth</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome для иконок -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @@keyframes gradient {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .animated-gradient {
+            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .input-hover {
+            transition: all 0.3s ease;
+        }
+
+            .input-hover:focus {
+                transform: translateY(-2px);
+            }
+    </style>
+</head>
+<body class="animated-gradient min-h-screen flex items-center justify-center p-4">
+    <div class="glass w-full max-w-md rounded-2xl shadow-2xl p-8">
+
+        <button type="button" onclick="goBack()"
+                class="absolute top-4 left-4
+                   text-black/80 hover:text-black
+                   flex items-center gap-2 text-sm font-medium
+                   transition-all duration-200">
+            <i class="fas fa-arrow-left"></i>
+            Назад
+        </button>
+
+        <!-- Логотип/Заголовок -->
+        <div class="text-center mb-8">
+            <div class="w-20 h-20 bg-gradient-to-br from-purple-600 to-pink-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <i class="fas fa-gamepad text-white text-3xl"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-800">Computer Club</h2>
+            <p class="text-gray-600 mt-2">Система администрирования</p>
+        </div>
+
+        <!-- Форма -->
+        <form method="post" class="space-y-6">
+            @Html.AntiForgeryToken()
+
+            <!-- ВАЖНО: Сохраняем ReturnUrl -->
+            @Html.HiddenFor(m => m.ReturnUrl)
+
+            <!-- OAuth info message -->
+            @if (!string.IsNullOrEmpty(Model?.ReturnUrl) && Model.ReturnUrl.Contains("/connect/authorize"))
+            {
+                <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
+                    <p class="text-sm">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Для продолжения авторизации OAuth 2.0 необходимо войти в систему
+                    </p>
+                </div>
+            }
+
+            <!-- Ошибки валидации -->
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+                    @Html.ValidationSummary(true, "", new { @class = "text-sm" })
+                </div>
+            }
+
+            <!-- Поле username - Важно: используем Html.TextBoxFor для правильной привязки -->
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-user text-gray-400"></i>
+                </div>
+                @Html.TextBoxFor(m => m.UserName, new {
+                @class = "input-hover block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white/80",
+                                placeholder = "Имя пользователя",
+                                autofocus = "autofocus"
+                                })
+                @Html.ValidationMessageFor(m => m.UserName, "", new { @class = "text-red-500 text-sm mt-1 block" })
+            </div>
+
+            <!-- Поле password - Важно: используем Html.PasswordFor -->
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-lock text-gray-400"></i>
+                </div>
+                @Html.PasswordFor(m => m.Password, new {
+                                @class = "input-hover block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent bg-white/80",
+                                placeholder = "Пароль",
+                                id = "password-input"
+                                })
+                <button type="button"
+                        onclick="togglePassword()"
+                        class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <i id="password-toggle" class="fas fa-eye text-gray-400 hover:text-gray-600"></i>
+                </button>
+                @Html.ValidationMessageFor(m => m.Password, "", new { @class = "text-red-500 text-sm mt-1 block" })
+            </div>
+
+            <!-- Remember me -->
+            <div class="flex items-center">
+                @Html.CheckBoxFor(m => m.RememberMe, new {
+                                @class = "h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                })
+                @Html.LabelFor(m => m.RememberMe, new {
+                                @class = "ml-2 block text-sm text-gray-700 cursor-pointer"
+                                })
+            </div>
+
+            <!-- Кнопка входа -->
+            <button type="submit"
+                    class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-4 rounded-lg hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2">
+                <i class="fas fa-sign-in-alt mr-2"></i>
+                Войти в систему
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Показать/скрыть пароль
+        function togglePassword() {
+            const passwordInput = document.getElementById('password-input');
+            const passwordToggle = document.getElementById('password-toggle');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                passwordToggle.classList.remove('fa-eye');
+                passwordToggle.classList.add('fa-eye-slash');
+            } else {
+                passwordInput.type = 'password';
+                passwordToggle.classList.remove('fa-eye-slash');
+                passwordToggle.classList.add('fa-eye');
+            }
+        }
+
+        function goBack() {
+            const encoded = '@Html.Raw(Model?.ReturnUrl ?? "")';
+
+            if (encoded) {
+                try {
+                    // encoded выглядит как "/connect/authorize?client_id=...&redirect_uri=https%3A%2F%2Fadmin..."
+                    const qIndex = encoded.indexOf('?');
+                    if (qIndex !== -1) {
+                        const query = encoded.slice(qIndex + 1);
+                        const params = new URLSearchParams(query);
+                        const redirectUri = params.get('redirect_uri');
+                        if (redirectUri) {
+                            const origin = new URL(decodeURIComponent(redirectUri)).origin;
+                            window.location.href = origin;
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    /* если что-то пошло не так — fallback ниже */
+                    console.warn('goBack() parse failed', e);
+                }
+            }
+            // Fallback: предыдущая страница или ничего, если историю стерли
+            history.back();
+        }
+    </script>
+</body>
+</html>
