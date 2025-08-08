@@ -36,21 +36,6 @@ public class TelegramController : ControllerBase
         _logger = logger;
     }
 
-    [HttpPost("bind")]
-    public async Task<IActionResult> Bind([FromBody] TelegramRawData dto, CancellationToken ct)
-    {
-        _logger.LogInformation("Bind POST raw dto: {Body}", JsonSerializer.Serialize(dto));
-        var sub = User.GetSubjectId();
-        if (string.IsNullOrEmpty(sub))
-            return Unauthorized("no subject in token");
-
-        var userId = Guid.Parse(sub!);
-        var result = await _bindTelegram.ExecuteAsync(userId, dto, _botToken, ct);
-        return result.Success
-            ? Ok(new { message = "bound" })
-            : BadRequest(result.Error);
-    }
-
     [HttpGet("me")]
     public async Task<IActionResult> Me(CancellationToken ct)
     {
