@@ -4,7 +4,7 @@ using System.Text;
 using Auth.Application.Interfaces;
 using Auth.Shared.Contracts;
 
-namespace Auth.Infrastructure.Services;
+namespace Auth.Infrastructure.Telegram;
 
 public class TelegramAuthVerifier : ITelegramAuthVerifier
 {
@@ -62,9 +62,9 @@ public class TelegramAuthVerifier : ITelegramAuthVerifier
     {
         var pairs = new (string k, string? v)[]
         {
-        ("auth_date", p.AuthDate.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        ("auth_date", p.AuthDate.ToString(CultureInfo.InvariantCulture)),
         ("first_name", p.FirstName),
-        ("id", p.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        ("id", p.Id.ToString(CultureInfo.InvariantCulture)),
         ("last_name", p.LastName),
         ("photo_url", p.PhotoUrl),
         ("username", p.Username)

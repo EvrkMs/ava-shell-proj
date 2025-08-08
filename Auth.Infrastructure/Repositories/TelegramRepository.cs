@@ -17,15 +17,24 @@ public class TelegramRepository : ITelegramRepository
     public Task<TelegramEntity?> GetByUserIdAsync(Guid userId, CancellationToken ct = default) =>
         _db.TelegramEntities.AsNoTracking().SingleOrDefaultAsync(t => t.UserId == userId, ct);
 
+    public Task<TelegramEntity?> GetByTelegramIdAsync(long telegramId, CancellationToken ct = default) =>
+        _db.TelegramEntities.AsNoTracking().SingleOrDefaultAsync(t => t.TelegramId == telegramId, cancellationToken: ct);
+
     public async Task AddAsync(TelegramEntity entity, CancellationToken ct = default)
     {
-        _db.TelegramEntities.Add(entity);
+        await _db.TelegramEntities.AddAsync(entity, ct);
         await _db.SaveChangesAsync(ct);
     }
 
     public async Task RemoveAsync(TelegramEntity entity, CancellationToken ct = default)
     {
         _db.TelegramEntities.Remove(entity);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(TelegramEntity entity, CancellationToken ct = default)
+    {
+        _db.TelegramEntities.Update(entity);
         await _db.SaveChangesAsync(ct);
     }
 }

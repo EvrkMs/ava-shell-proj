@@ -1,14 +1,17 @@
 ﻿using Auth.Application.Interfaces;
+using Auth.Application.UseCases.Telegram.Utils;
 using Auth.Domain.Entities;
 using Auth.Infrastructure.Data;
 using Auth.Infrastructure.Repositories;
 using Auth.Infrastructure.Services;
+using Auth.Infrastructure.Telegram;
 using Auth.Shared.Contracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Auth.Infrastructure;
 
@@ -16,6 +19,14 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config/*, IHostEnvironment env*/)
     {
+        services.Configure<TelegramAuthOptions>(
+        config.GetSection("Telegram"));
+
+        services.AddSingleton(resolver =>
+            resolver.GetRequiredService<IOptions<TelegramAuthOptions>>().Value);
+
+        services.AddSingleton<ITelegramAuthVerifier, TelegramAuthVerifier>();
+        services.AddSingleton<ITelegramPayloadValidator, TelegramPayloadValidator>();
         // DbContext
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
