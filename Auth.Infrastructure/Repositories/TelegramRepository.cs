@@ -15,7 +15,7 @@ public class TelegramRepository : ITelegramRepository
         _db.TelegramEntities.AsNoTracking().AnyAsync(t => t.TelegramId == telegramId, ct);
 
     public Task<TelegramEntity?> GetByUserIdAsync(Guid userId, CancellationToken ct = default) =>
-        _db.TelegramEntities.AsNoTracking().FirstOrDefaultAsync(t => t.UserId == userId, ct);
+        _db.TelegramEntities.AsNoTracking().SingleOrDefaultAsync(t => t.UserId == userId, ct);
 
     public async Task AddAsync(TelegramEntity entity, CancellationToken ct = default)
     {

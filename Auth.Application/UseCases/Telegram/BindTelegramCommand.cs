@@ -21,18 +21,18 @@ public class BindTelegramCommand
         _verifier = verifier;
     }
 
-    public async Task<Result> ExecuteAsync(Guid currentUserId, TelegramDto dto, string botToken, CancellationToken ct = default)
+    public async Task<Result> ExecuteAsync(Guid currentUserId, TelegramRawData dto, string botToken, CancellationToken ct = default)
     {
         // 1. Подпись
         if (!_verifier.Verify(dto, botToken))
             return Result.Fail("bad signature");
 
         // 2. TTL
-        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - dto.auth_date > 60)
+        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - dto.AuthDate > 60)
             return Result.Fail("stale auth_date");
 
         // 3. Проверка уникальности TelegramId
-        if (await _telegramRepo.ExistsByTelegramIdAsync(dto.id, ct))
+        if (await _telegramRepo.ExistsByTelegramIdAsync(dto.Id, ct))
             return Result.Fail("Этот Telegram уже привязан к другому аккаунту");
 
         // 4. Проверка пользователя
@@ -43,10 +43,10 @@ public class BindTelegramCommand
         // 5. Сохранение
         var entity = new TelegramEntity
         {
-            TelegramId = dto.id,
-            FirstName = dto.first_name,
-            Username = dto.username ?? "",
-            PhotoUrl = dto.photo_url ?? "",
+            TelegramId = dto.Id,
+            FirstName = dto.FirstName,
+            Username = dto.Username ?? "",
+            PhotoUrl = dto.PhotoUrl ?? "",
             UserId = currentUserId,
             BoundAt = DateTime.UtcNow,
             LastLoginDate = DateTime.UtcNow

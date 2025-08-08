@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Auth.Application.Interfaces;
 using Auth.Shared.Contracts;
@@ -7,39 +8,70 @@ namespace Auth.Infrastructure.Services;
 
 public class TelegramAuthVerifier : ITelegramAuthVerifier
 {
-    public bool Verify(TelegramDto telegramDto, string botToken)
+    public bool Verify(TelegramRawData p, string botToken)
     {
-        if (string.IsNullOrEmpty(botToken))
+        if (string.IsNullOrWhiteSpace(botToken))
             return false;
 
-        // Сбор полей кроме hash
-        var data = new List<string>();
+        // Собираем пары (только непустые), сортируем по ключу (Ordinal), склеиваем через '\n'
+        // Важно: id/auth_date -> строка через InvariantCulture
+        var pairs = new (string k, string? v)[]
+        {
+            ("auth_date", p.AuthDate == 0 ? null : p.AuthDate.ToString(CultureInfo.InvariantCulture)),
+            ("first_name", string.IsNullOrEmpty(p.FirstName) ? null : p.FirstName),
+            ("id",        p.Id == 0 ? null : p.Id.ToString(CultureInfo.InvariantCulture)),
+            ("last_name", string.IsNullOrEmpty(p.LastName) ? null : p.LastName),
+            ("photo_url", string.IsNullOrEmpty(p.PhotoUrl) ? null : p.PhotoUrl),
+            ("username",  string.IsNullOrEmpty(p.Username) ? null : p.Username),
+        };
 
-        if (telegramDto.auth_date != 0)
-            data.Add($"auth_date={telegramDto.auth_date}");
-        if (!string.IsNullOrEmpty(telegramDto.first_name))
-            data.Add($"first_name={telegramDto.first_name}");
-        if (telegramDto.id != 0)
-            data.Add($"id={telegramDto.id}");
-        if (!string.IsNullOrEmpty(telegramDto.photo_url))
-            data.Add($"photo_url={telegramDto.photo_url}");
-        if (!string.IsNullOrEmpty(telegramDto.username))
-            data.Add($"username={telegramDto.username}");
+        var sb = new StringBuilder(capacity: 128);
+        foreach (var s in pairs
+            .Where(x => !string.IsNullOrEmpty(x.v))
+            .OrderBy(x => x.k, StringComparer.Ordinal)
+            .Select(x => $"{x.k}={x.v}"))
+        {
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(s);
+        }
 
-        // Сортировка по ключу
-        data.Sort(StringComparer.Ordinal);
+        var dataBytes = Encoding.UTF8.GetBytes(sb.ToString());
 
-        var dataCheckString = string.Join("\n", data);
+        // Ключ = SHA256(botToken)
+        var key = SHA256.HashData(Encoding.UTF8.GetBytes(botToken));
 
-        // SHA256(botToken)
-        using var sha256 = SHA256.Create();
-        var secretKey = sha256.ComputeHash(Encoding.UTF8.GetBytes(botToken));
+        // HMAC-SHA256(data_check_string, key)
+        using var hmac = new HMACSHA256(key);
+        var calc = hmac.ComputeHash(dataBytes);
 
-        // HMAC-SHA256(dataCheckString, secretKey)
-        using var hmac = new HMACSHA256(secretKey);
-        var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(dataCheckString));
-        var hashHex = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+        // Сравниваем в константном времени
+        byte[]? given;
+        try
+        {
+            given = Convert.FromHexString(p.Hash);
+        }
+        catch
+        {
+            return false; // невалидный hex
+        }
 
-        return hashHex == telegramDto.hash.ToLowerInvariant();
+        return given.Length == calc.Length &&
+               CryptographicOperations.FixedTimeEquals(calc, given);
     }
+    public static string BuildDataCheckString(TelegramRawData p)
+    {
+        var pairs = new (string k, string? v)[]
+        {
+        ("auth_date", p.AuthDate.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        ("first_name", p.FirstName),
+        ("id", p.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        ("last_name", p.LastName),
+        ("photo_url", p.PhotoUrl),
+        ("username", p.Username)
+        };
+        return string.Join('\n', pairs.Where(x => !string.IsNullOrEmpty(x.v))
+            .OrderBy(x => x.k, StringComparer.Ordinal)
+            .Select(x => $"{x.k}={x.v}"));
+    }
+
 }

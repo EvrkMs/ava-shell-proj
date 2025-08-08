@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using System.Text.Json;
 using Auth.Application.UseCases.Telegram;
 using Auth.Shared.Contracts;
 using Duende.IdentityModel;
@@ -19,22 +20,26 @@ public class TelegramController : ControllerBase
     private readonly UnbindTelegramCommand _unbindTelegram;
     private readonly GetMyTelegramQuery _getMyTelegram;
     private readonly string _botToken;
+    private readonly ILogger<TelegramController> _logger;
 
     public TelegramController(
         BindTelegramCommand bindTelegram,
         UnbindTelegramCommand unbindTelegram,
         GetMyTelegramQuery getMyTelegram,
-        IConfiguration cfg)
+        IConfiguration cfg,
+        ILogger<TelegramController> logger)
     {
         _bindTelegram = bindTelegram;
         _unbindTelegram = unbindTelegram;
         _getMyTelegram = getMyTelegram;
         _botToken = cfg["Telegram:BotToken"]!;
+        _logger = logger;
     }
 
     [HttpPost("bind")]
-    public async Task<IActionResult> Bind([FromBody] TelegramDto dto, CancellationToken ct)
+    public async Task<IActionResult> Bind([FromBody] TelegramRawData dto, CancellationToken ct)
     {
+        _logger.LogInformation("Bind POST raw dto: {Body}", JsonSerializer.Serialize(dto));
         var sub = User.GetSubjectId();
         if (string.IsNullOrEmpty(sub))
             return Unauthorized("no subject in token");

@@ -1,26 +1,27 @@
-﻿using System.Security.Cryptography;
-using System.Text;
+﻿using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Infrastructure.Data;
+using Auth.Infrastructure.Services;
 using Auth.Shared.Contracts;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Validation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-
-namespace Auth.Infrastructure;
+using Microsoft.Extensions.Logging;
 
 public sealed class TelegramGrantValidator(
     AppDbContext db,
     UserManager<UserEntity> userManager,
-    IConfiguration cfg) : IExtensionGrantValidator      // SignInManager удалён
+    IConfiguration cfg,
+    ITelegramAuthVerifier telegramAuthVerifier,
+    ILogger<TelegramGrantValidator> log
+) : IExtensionGrantValidator
 {
     public string GrantType => GrantTypesConst.TelegramLogin;
 
     public async Task ValidateAsync(ExtensionGrantValidationContext ctx)
     {
-        /* ---------- 0. Базовые поля ---------- */
         var idStr = ctx.Request.Raw.Get("id");
         var username = ctx.Request.Raw.Get("username");
         var firstName = ctx.Request.Raw.Get("first_name");
@@ -29,92 +30,50 @@ public sealed class TelegramGrantValidator(
         var authDate = ctx.Request.Raw.Get("auth_date");
         var hash = ctx.Request.Raw.Get("hash");
 
-        if (string.IsNullOrEmpty(idStr) || string.IsNullOrEmpty(hash) ||
-            !long.TryParse(idStr, out var id) ||
-            !long.TryParse(authDate, out var authUnix))
-        {
-            ctx.Result = new(TokenRequestErrors.InvalidGrant, "missing fields");
-            return;
-        }
+        log.LogInformation("TG grant raw: id={id} u={u} fn?={fn} ln?={ln} photo?={ph} t?={t} h?={h}",
+            idStr, username, firstName is not null, lastName is not null, photoUrl is not null, authDate is not null, hash is not null);
 
-        /* ---------- 1. Тайм-аут ---------- */
-        var authTime = DateTimeOffset.FromUnixTimeSeconds(authUnix);
-        if ((DateTimeOffset.UtcNow - authTime).TotalSeconds > 60)
-        {
-            ctx.Result = new(TokenRequestErrors.InvalidGrant, "stale request");
-            return;
-        }
+        if (string.IsNullOrEmpty(idStr) || string.IsNullOrEmpty(authDate) || string.IsNullOrEmpty(hash))
+        { ctx.Result = new(TokenRequestErrors.InvalidGrant, "missing fields"); log.LogWarning("TG grant fail: missing fields"); return; }
 
-        /* ---------- 2. Проверка подписи ---------- */
+        if (!long.TryParse(idStr, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var id) ||
+            !long.TryParse(authDate, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var authUnix))
+        { ctx.Result = new(TokenRequestErrors.InvalidGrant, "bad numeric fields"); log.LogWarning("TG grant fail: bad numeric"); return; }
+
+        var now = DateTimeOffset.UtcNow;
+        var ts = DateTimeOffset.FromUnixTimeSeconds(authUnix);
+        if (Math.Abs((now - ts).TotalSeconds) > 60)
+        { ctx.Result = new(TokenRequestErrors.InvalidGrant, "stale request"); log.LogWarning("TG grant fail: stale request Δ={delta}s", (now - ts).TotalSeconds); return; }
+
+        var botToken = cfg["Telegram:BotToken"];
+        if (string.IsNullOrWhiteSpace(botToken))
+        { ctx.Result = new(TokenRequestErrors.InvalidGrant, "server misconfigured: bot token"); log.LogError("TG grant fail: no bot token"); return; }
+
         var raw = new TelegramRawData(
-            Id: idStr,
-            Username: username,
-            FirstName: firstName ?? string.Empty,   // ← гарантируем not-null
-            LastName: lastName,
-            PhotoUrl: photoUrl,
-            AuthDate: authDate!,
-            Hash: hash);
+            Id: id,
+            Username: string.IsNullOrEmpty(username) ? null : username,
+            FirstName: string.IsNullOrEmpty(firstName) ? null : firstName,
+            LastName: string.IsNullOrEmpty(lastName) ? null : lastName,
+            PhotoUrl: string.IsNullOrEmpty(photoUrl) ? null : photoUrl,
+            AuthDate: authUnix,
+            Hash: hash
+        );
 
-        if (!VerifyHash(cfg["Telegram:BotToken"]!, raw))
+        if (!telegramAuthVerifier.Verify(raw, botToken))
         {
+            // временно полезно увидеть DCS:
+            var dcs = TelegramAuthVerifier.BuildDataCheckString(raw);
+            log.LogWarning("TG grant fail: bad signature. DCS=`{dcs}`", dcs);
             ctx.Result = new(TokenRequestErrors.InvalidGrant, "bad signature");
             return;
         }
 
-        /* ---------- 3. Поиск привязки ---------- */
-        var tg = await db.TelegramEntities
-                         .Include(t => t.User)
-                         .SingleOrDefaultAsync(t => t.TelegramId == id);
+        var tg = await db.TelegramEntities.Include(t => t.User).FirstOrDefaultAsync(t => t.TelegramId == id);
+        if (tg?.User is null || !tg.User.IsActive)
+        { ctx.Result = new(TokenRequestErrors.InvalidGrant, "user not found"); log.LogWarning("TG grant fail: user not found or inactive for telegramId={id}", id); return; }
 
-        if (tg is null || tg.User is null)
-        {
-            ctx.Result = new(TokenRequestErrors.InvalidGrant,
-                             "Пользователь с таким Telegram-ID не найден");
-            return;
-        }
-
-        /* ---------- 4. Выдаём токен ---------- */
-        ctx.Result = new GrantValidationResult(
-            subject: tg.User.Id.ToString(), // Guid → string
-            authenticationMethod: GrantType);
-
-        // (Необязательно) обновляем дату последнего визита
-        tg.LastLoginDate = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-    }
-
-    /* ---------- Хэш-проверка без изменений ---------- */
-    private static bool VerifyHash(string botToken, in TelegramRawData p)
-    {
-        var dataCheck = new[]
-        {
-            ("auth_date", p.AuthDate),
-            ("first_name", p.FirstName),
-            ("id",         p.Id),
-            ("last_name",  p.LastName),
-            ("photo_url",  p.PhotoUrl),
-            ("username",   p.Username)
-        }
-        .Where(t => !string.IsNullOrEmpty(t.Item2))
-        .OrderBy(t => t.Item1)
-        .Select(t => $"{t.Item1}={t.Item2}");
-
-        var data = string.Join('\n', dataCheck);
-        var secretKey = SHA256.HashData(Encoding.UTF8.GetBytes(botToken));
-
-        using var hmac = new HMACSHA256(secretKey);
-        var calc = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(data)))
-                         .ToLowerInvariant();
-
-        return calc == p.Hash;
+        ctx.Result = new GrantValidationResult(subject: tg.User.Id.ToString(), authenticationMethod: GrantType);
+        tg.LastLoginDate = DateTime.UtcNow; await db.SaveChangesAsync();
+        log.LogInformation("TG grant success: telegramId={id} userId={user}", id, tg.User.Id);
     }
 }
-
-public readonly record struct TelegramRawData(
-    string Id,
-    string? Username,
-    string FirstName,
-    string? LastName,
-    string? PhotoUrl,
-    string AuthDate,
-    string Hash);

@@ -2,5 +2,5 @@
 
 public interface ITelegramAuthVerifier
 {
-    bool Verify(Shared.Contracts.TelegramDto dto, string botToken);
+    bool Verify(Shared.Contracts.TelegramRawData dto, string botToken);
 }
