@@ -13,6 +13,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Computer Club Auth</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome -->
@@ -164,7 +165,10 @@
             @{
                 var ru = Model?.ReturnUrl ?? "/";
                 var url = Url.Page("/Account/Telegram/TelegramLogin", null, new { returnUrl = ru }, Request.Scheme);
+                var initDataUrl = Url.Page("/Account/Telegram/InitData", null, new { returnUrl = ru }, Request.Scheme);
             }
+
+            <!-- Кнопка Login Widget (браузер) -->
             <script async src="https://telegram.org/js/telegram-widget.js?22"
                     data-telegram-login="ava_smena_bot"
                     data-size="large"
@@ -173,7 +177,31 @@
                     data-lang="ru"
                     data-auth-url="@url">
             </script>
+
+            <!-- Кнопка WebApp (показываем только если есть initData) -->
+            <div class="mt-3">
+                <a id="tg-webapp-btn"
+                   href="@initDataUrl"
+                   class="hidden inline-flex items-center justify-center w-full bg-slate-800 text-white font-semibold py-3 px-4 rounded-lg hover:opacity-90 transition"
+                   style="display:none">
+                    <i class="fa-brands fa-telegram mr-2"></i>
+                    Войти через Telegram (WebApp)
+                </a>
+			</div>
+			<script>
+				// показываем кнопку WebApp только если есть initData
+				(function () {
+				  const btn = document.getElementById('tg-webapp-btn');
+				  try {
+					const tg = window.Telegram && window.Telegram.WebApp;
+					if (tg && tg.initData) {
+					  btn.style.display = 'inline-flex';
+					}
+				  } catch { /* ignore */ }
+				})();
+			</script>
         </div>
+
     </div>
 
     <script>

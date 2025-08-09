@@ -2,7 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Linq;
+using System.Linq; // не забудь
 using Auth.Application.Interfaces;   // ITelegramRepository
 using Auth.Domain.Entities;        // UserEntity
 using Auth.Infrastructure;         // CustomSignInManager
@@ -14,14 +14,14 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace Auth.Host.Pages.Account.Telegram
 {
     [AllowAnonymous]
-    [IgnoreAntiforgeryToken] // POST идёт из WebView без антифорджери
+    [IgnoreAntiforgeryToken]
     public class InitDataModel : PageModel
     {
         private readonly ILogger<InitDataModel> _log;
         private readonly IIdentityServerInteractionService _interaction;
         private readonly IConfiguration _cfg;
-        private readonly CustomSignInManager _signIn;       // SignInManager<UserEntity>
-        private readonly ITelegramRepository _telegramRepo; // ваш репозиторий Telegram
+        private readonly CustomSignInManager _signIn;
+        private readonly ITelegramRepository _telegramRepo;
 
         public InitDataModel(
             ILogger<InitDataModel> log,
@@ -46,44 +46,37 @@ namespace Auth.Host.Pages.Account.Telegram
         [HttpPost]
         public async Task<IActionResult> OnPostAsync([FromBody] InitDataRequest req)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(new { error = "invalid request" });
+            if (!ModelState.IsValid) return Fail("invalid request", req.returnUrl, 400);
 
             var botToken = _cfg["Telegram:BotToken"];
-            if (string.IsNullOrWhiteSpace(botToken))
-                return StatusCode(500, new { error = "BotToken not configured" });
+            if (string.IsNullOrWhiteSpace(botToken)) return Fail("server misconfigured", req.returnUrl, 500);
 
-            // 1) Разбор и проверка подписи initData по правилам WebApp (Mini App)
             if (!TryParseInitData(req.initData, out var dict, out var hash))
-                return StatusCode(401, new { error = "malformed initData" });
+                return Fail("malformed initData", req.returnUrl, 401);
 
             if (!VerifyInitData(dict, hash, botToken))
-                return StatusCode(401, new { error = "bad signature" });
+                return Fail("bad signature", req.returnUrl, 401);
 
-            // 2) TTL (auth_date обязателен)
             if (!dict.TryGetValue("auth_date", out var authDateStr) || !long.TryParse(authDateStr, out var authDate))
-                return StatusCode(401, new { error = "no auth_date" });
+                return Fail("no auth_date", req.returnUrl, 401);
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var maxSkew = Math.Max(30, _cfg.GetValue<int?>("Telegram:WebAppSkewSeconds") ?? 300); // ≤5 минут
+            var maxSkew = Math.Max(30, _cfg.GetValue<int?>("Telegram:WebAppSkewSeconds") ?? 300);
             if (Math.Abs(now - authDate) > maxSkew)
-                return StatusCode(401, new { error = "stale initData" });
+                return Fail("stale initData", req.returnUrl, 401);
 
-            // 3) Достаём user из initData
             if (!dict.TryGetValue("user", out var userJson) || string.IsNullOrWhiteSpace(userJson))
-                return StatusCode(401, new { error = "no user payload" });
+                return Fail("no user payload", req.returnUrl, 401);
 
             var tgUser = JsonSerializer.Deserialize<TgUser>(userJson);
             if (tgUser is null || tgUser.id <= 0)
-                return StatusCode(401, new { error = "bad user payload" });
+                return Fail("bad user payload", req.returnUrl, 401);
 
-            // 4) Находим связку Telegram -> User (репозиторий должен подгрузить User через Include)
             var tg = await _telegramRepo.GetByTelegramIdAsync(tgUser.id);
             var appUser = tg?.User;
             if (appUser is null || !appUser.IsActive)
-                return StatusCode(401, new { error = "user not found" });
+                return Fail("user not found", req.returnUrl, 401);
 
-            // 5) Требование смены пароля — уводим на анонимную страницу смены
             if (appUser.MustChangePassword)
             {
                 var safeReturn = SafeReturn(req.returnUrl);
@@ -93,22 +86,32 @@ namespace Auth.Host.Pages.Account.Telegram
                     returnUrl = safeReturn,
                     requireChange = true
                 });
-                return new JsonResult(new { redirect = url });
+                return OkRedirect(url); // 200 с redirect
             }
 
-            // 6) Успешный вход
             await _signIn.SignInAsync(appUser, isPersistent: true);
-
-            // 7) Безопасный редирект назад
-            var redirect = SafeReturn(req.returnUrl) ?? "/";
-            return new JsonResult(new { redirect });
+            return OkRedirect(SafeReturn(req.returnUrl) ?? "/");
         }
 
-        private string? SafeReturn(string? returnUrl)
-            => !string.IsNullOrWhiteSpace(returnUrl) && _interaction.IsValidReturnUrl(returnUrl)
-                ? returnUrl : "/";
+        // ХЕЛПЕРЫ
 
-        // === Модель user из initData ===
+        private JsonResult OkRedirect(string url) =>
+            new JsonResult(new { redirect = url }) { StatusCode = 200 };
+
+        private JsonResult Fail(string code, string? returnUrl, int status) =>
+            new JsonResult(new
+            {
+                error = code,
+                // ВСЕГДА сохраняем исходный returnUrl при возврате на Login!
+                redirect = Url.Page("/Account/Login", pageHandler: null,
+                                    values: new { returnUrl = returnUrl ?? "/" },
+                                    protocol: Request.Scheme)
+            })
+            { StatusCode = status };
+
+        private string? SafeReturn(string? returnUrl) =>
+            !string.IsNullOrWhiteSpace(returnUrl) && _interaction.IsValidReturnUrl(returnUrl) ? returnUrl : "/";
+
         private sealed class TgUser
         {
             public long id { get; set; }
@@ -119,13 +122,6 @@ namespace Auth.Host.Pages.Account.Telegram
             public bool? is_premium { get; set; }
         }
 
-        // === Валидация initData для WebApp (Mini App) ===
-        // Алгоритм (важно не перепутать с Login Widget):
-        //  1) secret = HMAC_SHA256(key="WebAppData", message=bot_token)
-        //  2) data_check_string = join(<key>=<value> для всех ключей КРОМЕ 'hash',
-        //                              отсортированных по ключу), разделитель '\n'
-        //  3) calc_hash = HMAC_SHA256(key=secret, message=data_check_string) -> hex lower
-        //  4) сравнить с hash из initData в константное время
         private static bool VerifyInitData(Dictionary<string, string> data, string hash, string botToken)
         {
             using var hmac1 = new HMACSHA256(Encoding.UTF8.GetBytes("WebAppData"));
@@ -138,9 +134,7 @@ namespace Auth.Host.Pages.Account.Telegram
             var dataCheckString = string.Join("\n", lines);
 
             using var hmac2 = new HMACSHA256(secret);
-            var calc = hmac2.ComputeHash(Encoding.UTF8.GetBytes(dataCheckString));
-            var calcHex = Convert.ToHexString(calc).ToLowerInvariant();
-
+            var calcHex = Convert.ToHexString(hmac2.ComputeHash(Encoding.UTF8.GetBytes(dataCheckString))).ToLowerInvariant();
             return ConstantTimeEquals(calcHex, hash);
         }
 
@@ -149,9 +143,7 @@ namespace Auth.Host.Pages.Account.Telegram
             dict = new(StringComparer.Ordinal);
             hash = string.Empty;
 
-            // initData — querystring-подобная строка "key=value&key2=value2..."
-            var parts = initData.Split('&', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var p in parts)
+            foreach (var p in initData.Split('&', StringSplitOptions.RemoveEmptyEntries))
             {
                 var i = p.IndexOf('=');
                 if (i <= 0) continue;
@@ -167,8 +159,7 @@ namespace Auth.Host.Pages.Account.Telegram
         {
             if (a.Length != b.Length) return false;
             var diff = 0;
-            for (int i = 0; i < a.Length; i++)
-                diff |= a[i] ^ b[i];
+            for (int i = 0; i < a.Length; i++) diff |= a[i] ^ b[i];
             return diff == 0;
         }
     }
