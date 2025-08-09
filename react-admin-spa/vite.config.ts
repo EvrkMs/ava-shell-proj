@@ -138,8 +138,6 @@ export default defineConfig({
       'Content-Security-Policy': `
         default-src 'self';
         script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org;
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data: https:;
         connect-src 'self' https:;
         frame-ancestors *;

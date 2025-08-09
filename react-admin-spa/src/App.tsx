@@ -6,7 +6,7 @@ import Callback from "./pages/Callback";
 import LogoutCallback from "./pages/LogoutCallback";
 import Profile from "./pages/Profile/Profile";
 import { useAuth } from "./auth/AuthContext";
-import { AppBar, Box, Button, Container, IconButton, Toolbar, Typography } from "@mui/material";
+import { AppBar, Box, Button, Container, IconButton, Toolbar, Typography, CircularProgress } from "@mui/material";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import { ColorThemeContext } from "./theme/ColorThemeProvider";
@@ -24,12 +24,19 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
             Admin Panel
           </Typography>
           <Button component={Link} to="/" color="inherit">Главная</Button>
-          <Button component={Link} to="/profile" color="inherit">Профиль</Button>
+          
+          {state.bootstrapped && (
+            <>
+              {state.isAuthenticated && (
+                <Button component={Link} to="/profile" color="inherit">Профиль</Button>
+              )}
 
-          {!state.isAuthenticated ? (
-            <Button component={Link} to="/login" color="inherit">Войти</Button>
-          ) : (
-            <Button onClick={signout} color="inherit">Выйти</Button>
+              {!state.isAuthenticated ? (
+                <Button component={Link} to="/login" color="inherit">Войти</Button>
+              ) : (
+                <Button onClick={signout} color="inherit">Выйти</Button>
+              )}
+            </>
           )}
 
           <IconButton onClick={toggle} color="inherit" sx={{ ml: 1 }}>
@@ -45,6 +52,19 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
 };
 
 const App: React.FC = () => {
+  const { state } = useAuth();
+
+  // Показываем загрузку пока не определили состояние аутентификации
+  if (!state.bootstrapped) {
+    return (
+      <AppShell>
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 200 }}>
+          <CircularProgress />
+        </Box>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <Routes>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../../auth/AuthContext";
 import { api } from "../../../api";
 import {
@@ -23,29 +23,53 @@ type TelegramInfo = {
   lastLoginDate: string;
 };
 
+type TelegramState = {
+  data: TelegramInfo | null;
+  isLoading: boolean;
+  error: string | null;
+};
+
 export const TelegramCard: React.FC = () => {
   const { state } = useAuth();
-  const [tg, setTg] = useState<TelegramInfo | null | "loading">("loading");
-  const [err, setErr] = useState<string>();
+  const [tgState, setTgState] = useState<TelegramState>({
+    data: null,
+    isLoading: false,
+    error: null,
+  });
+
+  const fetchTelegramInfo = useCallback(async () => {
+    if (!state.isAuthenticated) return;
+    
+    setTgState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      const response = await api.get<TelegramInfo>("/api/telegram/me");
+      setTgState({ data: response.data, isLoading: false, error: null });
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
+        setTgState({ data: null, isLoading: false, error: null });
+      } else {
+        const errorMessage = error?.response?.data || error?.message || "Ошибка запроса";
+        setTgState({ data: null, isLoading: false, error: errorMessage });
+      }
+    }
+  }, [state.isAuthenticated]);
+
+  const handleUnbind = useCallback(async () => {
+    setTgState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      await api.post("/api/telegram/unbind");
+      setTgState({ data: null, isLoading: false, error: null });
+    } catch (error: any) {
+      const errorMessage = error?.response?.data || error?.message || "Ошибка отвязки";
+      setTgState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+    }
+  }, []);
 
   useEffect(() => {
-    if (!state.isAuthenticated) return;
-    (async () => {
-      setErr(undefined);
-      setTg("loading");
-      try {
-        const r = await api.get<TelegramInfo>("/api/telegram/me");
-        setTg(r.data);
-      } catch (e: any) {
-        if (e?.response?.status === 404) {
-          setTg(null); // не привязан — это ок
-        } else {
-          setErr(e?.response?.data ?? e?.message ?? "Ошибка запроса");
-          setTg(null);
-        }
-      }
-    })();
-  }, [state.isAuthenticated]);
+    fetchTelegramInfo();
+  }, [fetchTelegramInfo]);
 
   if (!state.isAuthenticated) {
     return (
@@ -60,9 +84,13 @@ export const TelegramCard: React.FC = () => {
       <Stack spacing={2}>
         <Typography variant="h6">Telegram</Typography>
 
-        {err && <Alert severity="error">{String(err)}</Alert>}
+        {tgState.error && (
+          <Alert severity="error" onClose={() => setTgState(prev => ({ ...prev, error: null }))}>
+            {tgState.error}
+          </Alert>
+        )}
 
-        {tg === "loading" && (
+        {tgState.isLoading && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <CircularProgress size={22} />
             <Typography>Загрузка...</Typography>
@@ -70,21 +98,24 @@ export const TelegramCard: React.FC = () => {
         )}
 
         {/* Привязан */}
-        {tg && tg !== "loading" && (
+        {tgState.data && !tgState.isLoading && (
           <Stack spacing={2}>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Avatar src={tg.photoUrl} alt={tg.username} />
+              <Avatar src={tgState.data.photoUrl} alt={tgState.data.username} />
               <Box>
                 <Typography>
                   Привязан:{" "}
-                  <b>
-                    {tg.username
-                      ? `@${tg.username}`
-                      : `${tg.firstName ?? ""} ${tg.lastName ?? ""}`.trim()}
-                  </b>
+                  <strong>
+                    {tgState.data.username
+                      ? `@${tgState.data.username}`
+                      : `${tgState.data.firstName ?? ""} ${tgState.data.lastName ?? ""}`.trim()}
+                  </strong>
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  ID: {tg.telegramId}
+                  ID: {tgState.data.telegramId}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Привязан: {new Date(tgState.data.boundAt).toLocaleDateString()}
                 </Typography>
               </Box>
             </Stack>
@@ -94,28 +125,17 @@ export const TelegramCard: React.FC = () => {
             <Stack direction="row" spacing={2}>
               <Button
                 variant="outlined"
-                onClick={async () => {
-                  try {
-                    await api.post("/api/telegram/unbind");
-                    setTg(null);
-                  } catch (e: any) {
-                    setErr(e?.response?.data ?? e?.message ?? "Unbind failed");
-                  }
-                }}
+                onClick={handleUnbind}
+                disabled={tgState.isLoading}
+                color="error"
               >
                 Отвязать Telegram
               </Button>
 
               <Button
                 variant="outlined"
-                onClick={async () => {
-                  try {
-                    const r = await api.get<TelegramInfo>("/api/telegram/me");
-                    setTg(r.data);
-                  } catch (e: any) {
-                    setErr(e?.response?.data ?? e?.message ?? "Refresh failed");
-                  }
-                }}
+                onClick={fetchTelegramInfo}
+                disabled={tgState.isLoading}
               >
                 Обновить
               </Button>
@@ -124,7 +144,7 @@ export const TelegramCard: React.FC = () => {
         )}
 
         {/* Не привязан */}
-        {tg === null && (
+        {!tgState.data && !tgState.isLoading && !tgState.error && (
           <Stack spacing={2}>
             <Typography>Telegram не привязан. Привяжите аккаунт:</Typography>
             <Box>
