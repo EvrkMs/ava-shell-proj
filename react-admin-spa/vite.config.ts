@@ -88,9 +88,9 @@ export default defineConfig({
 
           // ⛔ Telegram widget — всегда с сети
           { 
-            urlPattern: /^https:\/\/telegram\.org\/js\/telegram-widget\.js/i, 
+            urlPattern: /^https:\/\/telegram\.org\/js\/telegram-web-app\.js/i, 
             handler: "NetworkOnly", 
-            options: { cacheName: "tg-widget-no-cache" } 
+            options: { cacheName: "tg-webapp-no-cache" } 
           },
 
           // ⛔ Telegram аватарки/ресурсы — всегда с сети (или просто не попадают под наши image-правила)
@@ -113,6 +113,37 @@ export default defineConfig({
       clientPort: 443, // если front открыт по HTTPS
       protocol: "wss",
       path: "/hmr",
+    },
+    // Добавляем заголовки для поддержки iframe (Telegram WebApp)
+    headers: {
+      'X-Frame-Options': 'ALLOWALL',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    },
+  },
+  
+  // Настройки для SPA и iframe
+  base: './',
+  
+  // Дополнительные настройки для iframe
+  define: {
+    global: 'globalThis',
+  },
+  
+  // Настройки для продакшена
+  preview: {
+    headers: {
+      'X-Frame-Options': 'ALLOWALL',
+      'Content-Security-Policy': `
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com;
+        img-src 'self' data: https:;
+        connect-src 'self' https:;
+        frame-ancestors *;
+      `.replace(/\s+/g, ' ').trim(),
     },
   },
 });
