@@ -30,7 +30,7 @@
             @* Тут просто переменная, без лишнего блока *@
             var ru = Model?.ReturnUrl ?? "/";
             var callbackUrl = Url.Page(
-            "/Account/TelegramBind",
+            "/Account/Telegram/TelegramBind",
             null,
             new { handler = "Verify", returnUrl = ru },
             Request.Scheme

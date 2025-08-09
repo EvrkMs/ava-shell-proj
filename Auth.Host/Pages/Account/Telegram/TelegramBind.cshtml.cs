@@ -38,7 +38,6 @@ public class TelegramBindModel : PageModel
 
     public void OnGet() { }
 
-    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> OnGetVerifyAsync(
     string id, string first_name, string last_name, string username,
     string photo_url, long auth_date, string hash, string? returnUrl)
