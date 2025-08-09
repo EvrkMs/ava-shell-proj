@@ -1,0 +1,15 @@
+import React from "react";
+import { Stack, Typography } from "@mui/material";
+import { PersonalCard, TelegramCard } from "./components";
+
+const Profile: React.FC = () => {
+  return (
+    <Stack spacing={3}>
+      <Typography variant="h4">Профиль</Typography>
+      <PersonalCard />
+      <TelegramCard />
+    </Stack>
+  );
+};
+
+export default Profile;
