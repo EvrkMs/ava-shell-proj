@@ -1,0 +1,50 @@
+﻿@page
+@model Auth.Host.Pages.Account.Telegram.InitDataModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Вход через Telegram WebApp</title>
+    <script>
+        // После загрузки страницы: если открыты внутри Telegram — берём initData и постим на сервер
+        document.addEventListener('DOMContentLoaded', async () => {
+          const tg = window.Telegram && window.Telegram.WebApp;
+          const initData = tg && tg.initData;
+          const returnUrl = new URLSearchParams(location.search).get('returnUrl') || '/';
+
+          if (!initData) {
+            // Не внутри Telegram: отправляем на обычную страницу логина
+            window.location.href = `/Account/Login?returnUrl=${encodeURIComponent(returnUrl)}`;
+            return;
+          }
+
+          try {
+            const res = await fetch(location.pathname, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ initData, returnUrl })
+            });
+
+            // Сервер всегда отдаёт JSON { redirect: "..." }
+            const data = await res.json();
+            if (data && data.redirect) {
+              window.location.href = data.redirect;
+              return;
+            }
+
+            alert('Неожиданный ответ сервера');
+          } catch (e) {
+            console.error(e);
+            alert('Ошибка сети при входе через Telegram');
+          }
+        });
+    </script>
+</head>
+<body>
+    Входим через Telegram…
+</body>
+</html>

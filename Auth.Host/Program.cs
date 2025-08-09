@@ -1,5 +1,6 @@
 using System.Net;
 using Auth.Application.UseCases;
+using Auth.Host.Pages.Account.Telegram;
 using Auth.Infrastructure;
 using Auth.Infrastructure.Seeder;
 using Auth.Shared.Contracts;
@@ -17,7 +18,6 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 // --- Application + Infrastructure ---
 services.AddApplication();
 services.AddInfrastructure(cfg);
-
 // --- Razor Pages и API контроллеры ---
 services.AddRazorPages();
 services.AddControllers();
