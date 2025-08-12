@@ -3,35 +3,33 @@ using Auth.Application.UseCases.Telegram.Utils;
 using Auth.Domain.Entities;
 using Auth.Infrastructure.Data;
 using Auth.Infrastructure.Repositories;
-using Auth.Infrastructure.Services;
 using Auth.Infrastructure.Telegram;
 using Auth.Shared.Contracts;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using OpenIddict.Abstractions;
+using OpenIddict.Validation.AspNetCore;
 
 namespace Auth.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config/*, IHostEnvironment env*/)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        services.Configure<TelegramAuthOptions>(
-        config.GetSection("Telegram"));
-
-        services.AddSingleton(resolver =>
-            resolver.GetRequiredService<IOptions<TelegramAuthOptions>>().Value);
+        services.Configure<TelegramAuthOptions>(config.GetSection("Telegram"));
+        services.AddSingleton(resolver => resolver.GetRequiredService<IOptions<TelegramAuthOptions>>().Value);
 
         services.AddSingleton<ITelegramAuthVerifier, TelegramAuthVerifier>();
         services.AddSingleton<ITelegramPayloadValidator, TelegramPayloadValidator>();
+
         // DbContext
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
 
-        // Identity
+        // ASP.NET Identity
         services.AddIdentity<UserEntity, IdentityRole<Guid>>(options =>
         {
             options.Password.RequireDigit = true;
@@ -40,62 +38,83 @@ public static class DependencyInjection
             options.Password.RequiredLength = 8;
             options.Password.RequireNonAlphanumeric = false;
             options.SignIn.RequireConfirmedEmail = false;
-            options.User.RequireUniqueEmail = false;
             options.SignIn.RequireConfirmedPhoneNumber = false;
+            options.User.RequireUniqueEmail = false;
+
+            options.ClaimsIdentity.UserIdClaimType = System.Security.Claims.ClaimTypes.NameIdentifier;
+            options.ClaimsIdentity.UserNameClaimType = System.Security.Claims.ClaimTypes.Name;
+            options.ClaimsIdentity.RoleClaimType = System.Security.Claims.ClaimTypes.Role;
         })
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
 
+        // Настройка cookie для Identity
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.LoginPath = "/Account/Login";
+            options.LogoutPath = "/Account/Logout";
+            options.Cookie.Name = "AuthCookie";
+            options.Cookie.HttpOnly = true;
+            options.ExpireTimeSpan = TimeSpan.FromDays(30);
+            options.SlidingExpiration = true;
+        });
+
+        // Авторизационные политики
         services.AddAuthorizationBuilder()
-          // токен со скоупом "api" (универсальный доступ)
-          .AddPolicy("Api", p => p.RequireClaim("scope", ApiScopes.Api))
-          // чтение: подойдёт "api" ИЛИ "api:read"
-          .AddPolicy("ApiRead", p => p.RequireClaim("scope", ApiScopes.Api, ApiScopes.ApiRead))
-          // запись: требуется "api:write" (или, если хочешь, добавь сюда "api")
-          .AddPolicy("ApiWrite", p => p.RequireClaim("scope", ApiScopes.ApiWrite));
+          .AddPolicy("Api", p => p.RequireAssertion(ctx => ctx.User.HasScope(ApiScopes.Api)))
+          .AddPolicy("ApiRead", p => p.RequireAssertion(ctx =>
+               ctx.User.HasScope(ApiScopes.Api) || ctx.User.HasScope(ApiScopes.ApiRead)))
+          .AddPolicy("ApiWrite", p => p.RequireAssertion(ctx =>
+               ctx.User.HasScope(ApiScopes.ApiWrite) || ctx.User.HasScope(ApiScopes.Api)));
 
+        // OpenIddict
+        services.AddOpenIddict()
+            .AddCore(opt =>
+            {
+                opt.UseEntityFrameworkCore()
+                   .UseDbContext<AppDbContext>();
+            })
+            .AddServer(opt =>
+            {
+                opt.SetIssuer("https://auth.ava-kk.ru");
 
-        // Duende IdentityServer
-        services.AddIdentityServer(options =>
-        {
-            options.UserInteraction.LoginUrl = "/Account/Login";
-            options.UserInteraction.LogoutUrl = "/Account/Logout";
-            options.UserInteraction.LoginReturnUrlParameter = "ReturnUrl";
-            options.UserInteraction.LogoutIdParameter = "logoutId";
+                opt.SetAuthorizationEndpointUris("/connect/authorize")
+                   .SetTokenEndpointUris("/connect/token")
+                   .SetUserInfoEndpointUris("/connect/userinfo")
+                   .SetIntrospectionEndpointUris("/connect/introspect")
+                   .SetRevocationEndpointUris("/connect/revocation")
+                   .SetEndSessionEndpointUris("/connect/logout");
 
-            options.Caching.ClientStoreExpiration = TimeSpan.FromMinutes(30);
-            options.Authentication.CookieSlidingExpiration = true;
-            options.Authentication.CoordinateClientLifetimesWithUserSession = true;
-            options.Authentication.CookieSameSiteMode = SameSiteMode.None;
-        })
-        .AddAspNetIdentity<UserEntity>()
-        .AddDeveloperSigningCredential()
-        .AddConfigurationStore(opt =>
-        {
-            opt.ConfigureDbContext = b =>
-                b.UseNpgsql(
-                    config.GetConnectionString("DefaultConnection"),
-                    sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName));
-        })
-        .AddOperationalStore(opt =>
-        {
-            opt.ConfigureDbContext = b =>
-                b.UseNpgsql(
-                    config.GetConnectionString("DefaultConnection"),
-                    sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName));
+                opt.AllowAuthorizationCodeFlow()
+                   .RequireProofKeyForCodeExchange()
+                   .AllowRefreshTokenFlow();
 
-            opt.EnableTokenCleanup = true;
-            opt.TokenCleanupInterval = 3600;
-        })
-        // вернуть твои кастомы, если они используются:
-        .AddProfileService<ProfileService>()
-        // опционально:
-        .AddServerSideSessions();
+                opt.RegisterScopes("openid", "profile",
+                    ApiScopes.Api, ApiScopes.ApiRead, ApiScopes.ApiWrite, "offline_access");
+
+                opt.UseAspNetCore()
+                    .EnableAuthorizationEndpointPassthrough()
+                    .EnableTokenEndpointPassthrough()
+                    .EnableUserInfoEndpointPassthrough()
+                    .EnableEndSessionEndpointPassthrough()
+                    .EnableStatusCodePagesIntegration();
+
+                opt.AddDevelopmentEncryptionCertificate()
+                   .AddDevelopmentSigningCertificate();
+
+                opt.DisableAccessTokenEncryption();
+            })
+            .AddValidation(opt =>
+            {
+                opt.UseLocalServer();
+                opt.UseAspNetCore();
+
+                opt.AddAudiences("computerclub_api");
+            });
 
         // Репозитории и сервисы
         services.AddScoped<ITelegramRepository, TelegramRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
-        services.AddScoped<ITelegramAuthVerifier, TelegramAuthVerifier>();
         services.AddTransient<CustomSignInManager>();
 
         return services;

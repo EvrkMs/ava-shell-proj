@@ -1,82 +1,79 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Auth.Infrastructure; // твой CustomSignInManager
-using Duende.IdentityServer.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Auth.Infrastructure; // CustomSignInManager
 
-namespace Auth.Host.Pages.Account;
-
-[ValidateAntiForgeryToken] // окей, пусть висит на классе
-public class LoginModel : PageModel
+namespace Auth.Host.Pages.Account
 {
-    private readonly CustomSignInManager _signInManager;
-    private readonly IIdentityServerInteractionService _interaction;
-
-    public LoginModel(CustomSignInManager signInManager,
-                      IIdentityServerInteractionService interaction)
+    [ValidateAntiForgeryToken] // пусть висит на классе (POST защищаем)
+    public class LoginModel : PageModel
     {
-        _signInManager = signInManager;
-        _interaction = interaction;
-    }
+        private readonly CustomSignInManager _signInManager;
 
-    [BindProperty, Required(ErrorMessage = "Введите имя пользователя")]
-    public string UserName { get; set; } = string.Empty;
-
-    [BindProperty, Required(ErrorMessage = "Введите пароль")]
-    public string Password { get; set; } = string.Empty;
-
-    [BindProperty]
-    public bool RememberMe { get; set; }
-
-    [BindProperty(SupportsGet = true)]
-    public string? ReturnUrl { get; set; }
-
-    [IgnoreAntiforgeryToken] // иначе GET требует токен
-    public void OnGet() { }
-
-    public async Task<IActionResult> OnPostAsync()
-    {
-        if (!ModelState.IsValid)
-            return Page();
-
-        var result = await _signInManager.PasswordSignInAsync(
-            UserName, Password, RememberMe, lockoutOnFailure: true);
-
-        if (result.Succeeded)
+        public LoginModel(CustomSignInManager signInManager)
         {
-            if (!string.IsNullOrWhiteSpace(ReturnUrl) && _interaction.IsValidReturnUrl(ReturnUrl))
-                return LocalRedirect(ReturnUrl);
-
-            return LocalRedirect("/");
+            _signInManager = signInManager;
         }
 
-        if (result.RequiresTwoFactor)
-        {
-            ModelState.AddModelError(string.Empty, "Требуется двухфакторная аутентификация.");
-            return Page();
-        }
+        [BindProperty, Required(ErrorMessage = "Введите имя пользователя")]
+        public string UserName { get; set; } = string.Empty;
 
-        if (result.IsLockedOut)
-        {
-            ModelState.AddModelError(string.Empty, "Аккаунт временно заблокирован из-за неудачных попыток.");
-            return Page();
-        }
+        [BindProperty, Required(ErrorMessage = "Введите пароль")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = string.Empty;
 
-        if (result.IsNotAllowed)
-        {
-            // Форсим смену пароля: уводим на анонимную страницу ChangePassword
-            var safeReturn = (!string.IsNullOrWhiteSpace(ReturnUrl) && _interaction.IsValidReturnUrl(ReturnUrl))
-                ? ReturnUrl : "/";
+        [BindProperty]
+        public bool RememberMe { get; set; }
 
-            return RedirectToPage("/Account/ChangePassword", new
+        [BindProperty(SupportsGet = true)]
+        public string? ReturnUrl { get; set; }
+
+        [IgnoreAntiforgeryToken] // GET не требует токен
+        public void OnGet() { }
+
+        public async Task<IActionResult> OnPostAsync()
+        {
+            if (!ModelState.IsValid)
+                return Page();
+
+            var result = await _signInManager.PasswordSignInAsync(
+                UserName, Password, RememberMe, lockoutOnFailure: true);
+
+            if (result.Succeeded)
             {
-                userName = UserName,
-                returnUrl = safeReturn,
-                requireChange = true
-            });
+                var target = SafeReturnUrlOrRoot(ReturnUrl);
+                return LocalRedirect(target);
+            }
+
+            if (result.RequiresTwoFactor)
+            {
+                ModelState.AddModelError(string.Empty, "Требуется двухфакторная аутентификация.");
+                return Page();
+            }
+
+            if (result.IsLockedOut)
+            {
+                ModelState.AddModelError(string.Empty, "Аккаунт временно заблокирован из-за неудачных попыток.");
+                return Page();
+            }
+
+            if (result.IsNotAllowed)
+            {
+                // Форсим смену пароля: уводим на анонимную страницу ChangePassword
+                var safeReturn = SafeReturnUrlOrRoot(ReturnUrl);
+                return RedirectToPage("/Account/ChangePassword", new
+                {
+                    userName = UserName,
+                    returnUrl = safeReturn,
+                    requireChange = true
+                });
+            }
+
+            ModelState.AddModelError(string.Empty, "Неверное имя пользователя или пароль");
+            return Page();
         }
 
-        ModelState.AddModelError(string.Empty, "Неверное имя пользователя или пароль");
-        return Page();
+        private string SafeReturnUrlOrRoot(string? url)
+            => (!string.IsNullOrWhiteSpace(url) && Url.IsLocalUrl(url)) ? url! : "/";
     }
 }

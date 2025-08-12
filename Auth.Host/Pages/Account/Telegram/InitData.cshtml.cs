@@ -2,11 +2,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Linq; // не забудь
 using Auth.Application.Interfaces;   // ITelegramRepository
-using Auth.Domain.Entities;        // UserEntity
 using Auth.Infrastructure;         // CustomSignInManager
-using Duende.IdentityServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -18,20 +15,17 @@ namespace Auth.Host.Pages.Account.Telegram
     public class InitDataModel : PageModel
     {
         private readonly ILogger<InitDataModel> _log;
-        private readonly IIdentityServerInteractionService _interaction;
         private readonly IConfiguration _cfg;
         private readonly CustomSignInManager _signIn;
         private readonly ITelegramRepository _telegramRepo;
 
         public InitDataModel(
             ILogger<InitDataModel> log,
-            IIdentityServerInteractionService interaction,
             IConfiguration cfg,
             CustomSignInManager signIn,
             ITelegramRepository telegramRepo)
         {
             _log = log;
-            _interaction = interaction;
             _cfg = cfg;
             _signIn = signIn;
             _telegramRepo = telegramRepo;
@@ -109,8 +103,8 @@ namespace Auth.Host.Pages.Account.Telegram
             })
             { StatusCode = status };
 
-        private string? SafeReturn(string? returnUrl) =>
-            !string.IsNullOrWhiteSpace(returnUrl) && _interaction.IsValidReturnUrl(returnUrl) ? returnUrl : "/";
+        private string SafeReturn(string? url)
+            => (!string.IsNullOrWhiteSpace(url) && Url.IsLocalUrl(url)) ? url! : "/";
 
         private sealed class TgUser
         {

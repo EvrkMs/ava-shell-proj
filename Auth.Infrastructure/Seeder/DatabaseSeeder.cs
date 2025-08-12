@@ -1,7 +1,5 @@
 ﻿using Auth.Domain.Entities;
 using Auth.Infrastructure.Data;
-using Duende.IdentityServer.EntityFramework.DbContexts;
-using Duende.IdentityServer.EntityFramework.Mappers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,13 +15,11 @@ public static class DatabaseSeeder
         var provider = scope.ServiceProvider;
 
         await provider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
-        await provider.GetRequiredService<ConfigurationDbContext>().Database.MigrateAsync();
-        await provider.GetRequiredService<PersistedGrantDbContext>().Database.MigrateAsync();
 
         // Сидеры
         await SeedRolesAsync(provider);
         await SeedDefaultUserAsync(provider);
-        await SeedIdentityServerConfigAsync(provider);
+        await OpenIddictSeeder.SeedAsync(provider);
     }
 
     private static async Task SeedRolesAsync(IServiceProvider sp)
@@ -58,32 +54,5 @@ public static class DatabaseSeeder
             throw new Exception("Не удалось создать пользователя root: " +
                 string.Join(", ", result.Errors.Select(e => e.Description)));
         }
-    }
-
-    private static async Task SeedIdentityServerConfigAsync(IServiceProvider sp)
-    {
-        var ctx = sp.GetRequiredService<ConfigurationDbContext>();
-
-        if (!ctx.Clients.Any())
-        {
-            ctx.Clients.Add(IdentityServerSeeder.GetClients().First().ToEntity());
-        }
-        if (!ctx.IdentityResources.Any())
-        {
-            ctx.IdentityResources.AddRange(
-                IdentityServerSeeder.GetIdentityResources().Select(r => r.ToEntity()));
-        }
-        if (!ctx.ApiScopes.Any())
-        {
-            ctx.ApiScopes.AddRange(
-                IdentityServerSeeder.GetApiScopes().Select(s => s.ToEntity()));
-        }
-        if (!ctx.ApiResources.Any())
-        {
-            ctx.ApiResources.AddRange(
-                IdentityServerSeeder.GetApiResources().Select(r => r.ToEntity()));
-        }
-
-        await ctx.SaveChangesAsync();
     }
 }

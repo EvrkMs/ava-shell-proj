@@ -5,7 +5,7 @@
 namespace Auth.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddBoolMastChangePassword : Migration
+    public partial class initCoreServerIdenti : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

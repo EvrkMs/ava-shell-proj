@@ -1,86 +1,59 @@
-﻿using Duende.IdentityServer;
-using Duende.IdentityServer.Events;
-using Duende.IdentityServer.Extensions;
-using Duende.IdentityServer.Services;
+﻿using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using OpenIddict.Server.AspNetCore;
 
-namespace Auth.Host.Pages.Account;
-
-public class LogoutModel(
-        IIdentityServerInteractionService interaction,
-        IEventService events) : PageModel
+namespace Auth.Host.Pages.Account
 {
-    private readonly IIdentityServerInteractionService _interaction = interaction;
-    private readonly IEventService _events = events;
-
-    // данные для Razor‑View
-    public string? PostLogoutRedirectUri { get; private set; }
-    public string? ClientName { get; private set; }
-    public string? SignOutIframeUrl { get; private set; }
-    public bool AutomaticRedirectAfterSignOut => true;
-
-    /* ---------- GET: показываем форму или сразу выполняем логаут ---------- */
-    public async Task<IActionResult> OnGetAsync(string? logoutId)
+    public class LogoutModel : PageModel
     {
-        // если IdentityServer настроен без подтверждения, создаём POST‑логаут сами
-        logoutId ??= await _interaction.CreateLogoutContextAsync();
+        [BindProperty(SupportsGet = true)]
+        public string? ReturnUrl { get; set; }
 
-        var ctx = await _interaction.GetLogoutContextAsync(logoutId);
+        public bool AutomaticRedirectAfterSignOut => true;
 
-        // нет формы — сразу POST
-        if (ctx?.ShowSignoutPrompt == false)
+        public void OnGet()
         {
-            return await LogoutAsync(logoutId);
+            // Получаем post_logout_redirect_uri из OIDC запроса
+            var request = HttpContext.GetOpenIddictServerRequest();
+            if (!string.IsNullOrEmpty(request?.PostLogoutRedirectUri))
+            {
+                ViewData["PostLogoutRedirectUri"] = request.PostLogoutRedirectUri;
+            }
         }
 
-        // иначе показываем страницу Logout.cshtml (кнопка «Выйти» → POST)
-        PostLogoutRedirectUri = ctx?.PostLogoutRedirectUri;
-        ClientName = ctx?.ClientName ?? ctx?.ClientId;
-        SignOutIframeUrl = ctx?.SignOutIFrameUrl;
-        ViewData["LogoutId"] = logoutId;
-
-        return Page();
-    }
-
-    /* ---------- POST: собственно выход ---------- */
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> OnPostAsync(string logoutId)
-        => await LogoutAsync(logoutId);
-
-    /* ---------- общий метод ---------- */
-    private async Task<IActionResult> LogoutAsync(string logoutId)
-    {
-        /* 1. удаляем куки всех схем, которые держат пользователя аутентифицированным */
-        await HttpContext.SignOutAsync(IdentityServerConstants.DefaultCookieAuthenticationScheme);     // idsrv
-        await HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);                          // ASP.NET Core Identity
-        await HttpContext.SignOutAsync(IdentityServerConstants.ExternalCookieAuthenticationScheme);   // внешние провайдеры (если были)
-
-        /* 2. событие для аудита */
-        if (User?.Identity?.IsAuthenticated == true)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> OnPostAsync()
         {
-            await _events.RaiseAsync(
-                new UserLogoutSuccessEvent(User.GetSubjectId(), User.GetDisplayName()));
+            await SignOutAllAsync();
+
+            // Проверяем, есть ли OIDC post_logout_redirect_uri
+            var request = HttpContext.GetOpenIddictServerRequest();
+            if (!string.IsNullOrEmpty(request?.PostLogoutRedirectUri))
+            {
+                return SignOut(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties
+                    {
+                        RedirectUri = request.PostLogoutRedirectUri
+                    });
+            }
+
+            var target = SafeReturn(ReturnUrl);
+            return AutomaticRedirectAfterSignOut
+                ? LocalRedirect(target)
+                : Page();
         }
 
-        /* 3. получаем контекст, чтобы отдать iFrame + редирект */
-        var ctx = await _interaction.GetLogoutContextAsync(logoutId);
-
-        PostLogoutRedirectUri = ctx?.PostLogoutRedirectUri;
-        ClientName = ctx?.ClientName ?? ctx?.ClientId;
-        SignOutIframeUrl = ctx?.SignOutIFrameUrl;
-
-        /* 4. Уведомляем клиентов через фронт‑канал (если нужно) */
-        if (SignOutIframeUrl != null)
+        private async Task SignOutAllAsync()
         {
-            Response.Headers.Add("Logout-IFrame-Url", SignOutIframeUrl);
+            await HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
 
-        /* 5. Авто‑редирект или страница «Вы вышли» */
-        return AutomaticRedirectAfterSignOut && PostLogoutRedirectUri != null
-            ? Redirect(PostLogoutRedirectUri)
-            : Page();
+        private string SafeReturn(string? url)
+            => (!string.IsNullOrWhiteSpace(url) && Url.IsLocalUrl(url)) ? url! : "/";
     }
 }

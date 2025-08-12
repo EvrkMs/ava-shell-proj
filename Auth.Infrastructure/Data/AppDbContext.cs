@@ -12,7 +12,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> opt)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        modelBuilder.UseOpenIddict();
+        base.OnModelCreating(modelBuilder);
     }
 }

@@ -1,13 +1,11 @@
 using System.Net;
 using Auth.Application.UseCases;
-using Auth.Host.Pages.Account.Telegram;
 using Auth.Infrastructure;
 using Auth.Infrastructure.Seeder;
 using Auth.Shared.Contracts;
-using Duende.IdentityModel;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Identity;
+using OpenIddict.Validation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
@@ -22,23 +20,24 @@ services.AddInfrastructure(cfg);
 services.AddRazorPages();
 services.AddControllers();
 
-// --- JWT Bearer дл€ API ---
-services.AddAuthentication()                 // <Ч без override defaults
-    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, o =>
+services.AddAuthentication(options =>
+{
+    options.DefaultScheme = "smart";
+})
+.AddPolicyScheme("smart", "Dynamic scheme", options =>
+{
+    options.ForwardDefaultSelector = ctx =>
     {
-        o.Authority = cfg["Jwt:Authority"] ?? "https://auth.ava-kk.ru";
-        o.Audience = ApiResources.ComputerClubApi;
-        o.RequireHttpsMetadata = true;
+        if (ctx.Request.Path.StartsWithSegments("/api"))
+            return OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
 
-        o.MapInboundClaims = false;
+        if (ctx.Request.Headers.ContainsKey("Authorization"))
+            return OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
 
-        o.TokenValidationParameters = new TokenValidationParameters
-        {
-            NameClaimType = JwtClaimTypes.Subject, // "sub"
-            RoleClaimType = JwtClaimTypes.Role
-        };
-    });
+        return IdentityConstants.ApplicationScheme;
+    };
 
+});
 // --- јвторизаци€ по скоупам ---
 services.AddAuthorizationBuilder()
     .AddPolicy("ApiWrite", p => p.RequireClaim("scope", ApiScopes.ApiWrite));
@@ -101,7 +100,6 @@ app.UseRouting();
 app.UseCors("spa");
 
 app.UseAuthentication();       // JWT / Cookies
-app.UseIdentityServer();       // /.well-known, /connect/*
 app.UseAuthorization();
 
 // --- Endpoints ---

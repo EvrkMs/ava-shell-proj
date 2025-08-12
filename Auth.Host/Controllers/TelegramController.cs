@@ -1,15 +1,19 @@
-﻿using Auth.Application.UseCases.Telegram;
-using Duende.IdentityServer.Extensions;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using System.Security.Claims;
+using Auth.Application.UseCases.Telegram;
+using Auth.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using OpenIddict.Abstractions;
+using OpenIddict.Validation.AspNetCore;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Auth.Host.Controllers;
 
 [ApiController]
 [Route("api/telegram")]
 [IgnoreAntiforgeryToken]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Policy = "ApiRead")]
+[Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, Policy = "ApiRead")]
 public class TelegramController : ControllerBase
 {
     private readonly BindTelegramCommand _bindTelegram;
@@ -35,24 +39,47 @@ public class TelegramController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> Me(CancellationToken ct)
     {
-        var sub = User.GetSubjectId();
+        // Попробуем разные способы получить userId
+        var sub = User.FindFirstValue("sub")
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
 
-        if (string.IsNullOrEmpty(sub))
-            return Unauthorized("no subject in token");
+        _logger.LogInformation("Looking for subject claim. Found: {sub}", sub);
+        _logger.LogInformation("All claims: {claims}",
+            string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
 
-        var userId = Guid.Parse(sub!);
+        if (string.IsNullOrWhiteSpace(sub))
+        {
+            return Unauthorized(new
+            {
+                error = "no_subject",
+                claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList()
+            });
+        }
+
+        if (!Guid.TryParse(sub, out var userId))
+        {
+            return Unauthorized(new
+            {
+                error = "invalid_subject",
+                subject = sub
+            });
+        }
+
         var tg = await _getMyTelegram.ExecuteAsync(userId, ct);
-        return tg is null ? NotFound() : Ok(tg);
+        return tg is null ? NotFound(new { error = "no_telegram_binding" }) : Ok(tg);
     }
 
     [HttpPost("unbind")]
     public async Task<IActionResult> Unbind(CancellationToken ct)
     {
-        var sub = User.GetSubjectId();
-        if (string.IsNullOrEmpty(sub))
+        var sub = User.FindFirstValue("sub");
+        if (string.IsNullOrWhiteSpace(sub))
             return Unauthorized("no subject in token");
 
-        var userId = Guid.Parse(sub!);
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized("invalid subject");
+
         var result = await _unbindTelegram.ExecuteAsync(userId, ct);
         return result.Success
             ? Ok(new { message = "unbound" })

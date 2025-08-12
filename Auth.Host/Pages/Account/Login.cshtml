@@ -200,6 +200,26 @@
 				  } catch { /* ignore */ }
 				})();
 			</script>
+            @if (Request.Query.ContainsKey("error"))
+            {
+                var error = Request.Query["error"].ToString();
+                var errorMessage = error switch
+                {
+                    "missing_fields" => "Некорректные данные от Telegram",
+                    "stale_request" => "Истек срок действия запроса. Попробуйте снова",
+                    "invalid_signature" => "Неверная подпись данных",
+                    "no_binding" => "Telegram аккаунт не привязан ни к одному пользователю",
+                    "user_not_found" => "Пользователь не найден",
+                    "user_inactive" => "Учетная запись неактивна",
+                    "server_error" => "Ошибка сервера. Обратитесь к администратору",
+                    _ => "Ошибка входа через Telegram"
+                };
+
+                <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 text-yellow-700 dark:text-yellow-200 px-4 py-3 rounded-lg mb-4 text-sm">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    @errorMessage
+                </div>
+            }
         </div>
 
     </div>
