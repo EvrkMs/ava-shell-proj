@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace Auth.Infrastructure.Data;
+namespace Auth.EntityFramework.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> opt)
     : IdentityDbContext<UserEntity, IdentityRole<Guid>, Guid>(opt)

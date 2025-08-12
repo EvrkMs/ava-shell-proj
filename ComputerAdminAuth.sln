@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auth.Infrastructure", "Auth
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auth.Host", "Auth.Host\Auth.Host.csproj", "{663DD1E9-B7BF-47DE-9107-F8C7178D18D3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auth.EntityFramework", "Auth.EntityFramework\Auth.EntityFramework.csproj", "{6914D2B6-F501-4ACC-80EC-C752F920324D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,10 @@ Global
 		{663DD1E9-B7BF-47DE-9107-F8C7178D18D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{663DD1E9-B7BF-47DE-9107-F8C7178D18D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{663DD1E9-B7BF-47DE-9107-F8C7178D18D3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6914D2B6-F501-4ACC-80EC-C752F920324D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6914D2B6-F501-4ACC-80EC-C752F920324D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6914D2B6-F501-4ACC-80EC-C752F920324D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6914D2B6-F501-4ACC-80EC-C752F920324D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -51,6 +57,7 @@ Global
 		{E8830C41-C85A-4EA3-8D29-1A2A5EF42AE6} = {36D591C7-65C7-A0D1-1CBC-10CDE441BDC8}
 		{7257C154-080C-44C4-8B4C-1F2C53A4F4E2} = {36D591C7-65C7-A0D1-1CBC-10CDE441BDC8}
 		{663DD1E9-B7BF-47DE-9107-F8C7178D18D3} = {36D591C7-65C7-A0D1-1CBC-10CDE441BDC8}
+		{6914D2B6-F501-4ACC-80EC-C752F920324D} = {36D591C7-65C7-A0D1-1CBC-10CDE441BDC8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A1D34CB4-9F60-404A-AD6B-16238118385C}

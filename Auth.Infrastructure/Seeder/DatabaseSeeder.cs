@@ -1,5 +1,5 @@
 ﻿using Auth.Domain.Entities;
-using Auth.Infrastructure.Data;
+using Auth.EntityFramework.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

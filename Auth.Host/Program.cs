@@ -77,6 +77,15 @@ builder.WebHost.UseKestrel(o =>
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Add(
+        "Content-Security-Policy",
+        "frame-ancestors https://*.telegram.org"
+    );
+    await next();
+});
+
 // --- Forwarded headers (за прокси) ---
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {

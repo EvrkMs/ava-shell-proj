@@ -1,8 +1,8 @@
 ﻿using Auth.Application.Interfaces;
 using Auth.Application.UseCases.Telegram.Utils;
 using Auth.Domain.Entities;
-using Auth.Infrastructure.Data;
-using Auth.Infrastructure.Repositories;
+using Auth.EntityFramework.Data;
+using Auth.EntityFramework.Repositories;
 using Auth.Infrastructure.Telegram;
 using Auth.Shared.Contracts;
 using Microsoft.AspNetCore.Identity;

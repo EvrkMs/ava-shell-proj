@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace Auth.Infrastructure.Data.Configurations;
+namespace Auth.EntityFramework.Data.Configurations;
 
 internal class TelegramConfiguration : IEntityTypeConfiguration<TelegramEntity>
 {
