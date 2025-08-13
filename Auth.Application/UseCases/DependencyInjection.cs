@@ -8,8 +8,8 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<GetMyTelegramQuery>();
-        services.AddTransient<BindTelegramCommand>();
         services.AddTransient<UnbindTelegramCommand>();
+        services.AddScoped<BindTelegramCommand>();
 
         return services;
     }

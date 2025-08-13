@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using Auth.Application.UseCases.Telegram;
 using Auth.Domain.Entities;
+using Auth.TelegramAuth.UseCases;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,23 +17,17 @@ namespace Auth.Host.Controllers;
 [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, Policy = "ApiRead")]
 public class TelegramController : ControllerBase
 {
-    private readonly BindTelegramCommand _bindTelegram;
     private readonly UnbindTelegramCommand _unbindTelegram;
     private readonly GetMyTelegramQuery _getMyTelegram;
-    private readonly string _botToken;
     private readonly ILogger<TelegramController> _logger;
 
     public TelegramController(
-        BindTelegramCommand bindTelegram,
         UnbindTelegramCommand unbindTelegram,
         GetMyTelegramQuery getMyTelegram,
-        IConfiguration cfg,
         ILogger<TelegramController> logger)
     {
-        _bindTelegram = bindTelegram;
         _unbindTelegram = unbindTelegram;
         _getMyTelegram = getMyTelegram;
-        _botToken = cfg["Telegram:BotToken"]!;
         _logger = logger;
     }
 

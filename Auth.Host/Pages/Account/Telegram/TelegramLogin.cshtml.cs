@@ -1,8 +1,9 @@
 ﻿using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Infrastructure;
-using Auth.Infrastructure.Telegram;
 using Auth.Shared.Contracts;
+using Auth.TelegramAuth.Interface; // ITelegramAuthService, TelegramRawData
+using Auth.TelegramAuth.Raw;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -18,23 +19,20 @@ namespace Auth.Host.Pages.Account.Telegram
         private readonly ITelegramRepository _telegramRepo;
         private readonly UserManager<UserEntity> _userManager;
         private readonly CustomSignInManager _signInManager;
-        private readonly ITelegramAuthVerifier _verifier;
-        private readonly TelegramAuthOptions _opts;
+        private readonly ITelegramAuthService _tg;
         private readonly ILogger<TelegramLoginModel> _log;
 
         public TelegramLoginModel(
             ITelegramRepository telegramRepo,
             UserManager<UserEntity> userManager,
             CustomSignInManager signInManager,
-            ITelegramAuthVerifier verifier,
-            TelegramAuthOptions opts,
+            ITelegramAuthService tg,
             ILogger<TelegramLoginModel> log)
         {
             _telegramRepo = telegramRepo;
             _userManager = userManager;
             _signInManager = signInManager;
-            _verifier = verifier;
-            _opts = opts;
+            _tg = tg;
             _log = log;
         }
 
@@ -50,9 +48,9 @@ namespace Auth.Host.Pages.Account.Telegram
             [FromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
         }
 
-        public async Task<IActionResult> OnGetAsync([FromQuery] TelegramQuery q)
+        public async Task<IActionResult> OnGetAsync([FromQuery] TelegramQuery q, CancellationToken ct)
         {
-            // 1) Валидация полей
+            // 1) Базовая валидация полей
             if (q.Id <= 0 || q.AuthDate <= 0 || string.IsNullOrWhiteSpace(q.Hash))
             {
                 _log.LogWarning("TelegramLogin: missing fields (id={id}, auth_date={auth}, hash?={hash})",
@@ -60,49 +58,33 @@ namespace Auth.Host.Pages.Account.Telegram
                 return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "missing_fields" });
             }
 
-            // 2) Проверка TTL
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var skew = Math.Max(60, _opts.AllowedClockSkewSeconds);
-            if (Math.Abs(now - q.AuthDate) > skew)
+            // 2) Криптопроверка подписи + TTL внутри сервиса
+            var raw = new TelegramRawData()
             {
-                _log.LogWarning("TelegramLogin: stale request Δ={delta}s > {skew}s",
-                    Math.Abs(now - q.AuthDate), skew);
-                return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "stale_request" });
+                Id = q.Id,
+                Username = q.Username,
+                FirstName = q.FirstName,
+                LastName = q.LastName,
+                PhotoUrl = q.PhotoUrl,
+                AuthDate = q.AuthDate,
+                Hash = q.Hash
+            };
+
+            if (!_tg.VerifyWidget(raw, out var sigErr))
+            {
+                _log.LogWarning("TelegramLogin: bad signature (id={id}, err={err})", q.Id, sigErr ?? "-");
+                return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = sigErr ?? "invalid_signature" });
             }
 
-            // 3) Проверка конфигурации
-            if (string.IsNullOrWhiteSpace(_opts.BotToken))
-            {
-                _log.LogError("TelegramLogin: BotToken is not configured");
-                return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "server_error" });
-            }
-
-            // 4) Проверка подписи
-            var raw = new TelegramRawData(
-                Id: q.Id,
-                Username: q.Username,
-                FirstName: q.FirstName,
-                LastName: q.LastName,
-                PhotoUrl: q.PhotoUrl,
-                AuthDate: q.AuthDate,
-                Hash: q.Hash
-            );
-
-            if (!_verifier.Verify(raw, _opts.BotToken))
-            {
-                _log.LogWarning("TelegramLogin: bad signature for id={id}", q.Id);
-                return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "invalid_signature" });
-            }
-
-            // 5) Ищем привязку через репозиторий
-            var telegram = await _telegramRepo.GetByTelegramIdAsync(q.Id);
+            // 3) Ищем привязку через репозиторий
+            var telegram = await _telegramRepo.GetByTelegramIdAsync(q.Id, ct);
             if (telegram == null)
             {
                 _log.LogWarning("TelegramLogin: no binding for telegram_id={id}", q.Id);
                 return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "no_binding" });
             }
 
-            // 6) Получаем пользователя через UserManager
+            // 4) Пользователь
             var user = await _userManager.FindByIdAsync(telegram.UserId.ToString());
             if (user == null)
             {
@@ -110,14 +92,12 @@ namespace Auth.Host.Pages.Account.Telegram
                 return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "user_not_found" });
             }
 
-            // 7) Проверяем статус пользователя
             if (!user.IsActive)
             {
                 _log.LogWarning("TelegramLogin: user {userId} is not active", user.Id);
                 return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "user_inactive" });
             }
 
-            // 8) Проверяем необходимость смены пароля
             if (user.MustChangePassword)
             {
                 _log.LogInformation("TelegramLogin: user {userId} must change password", user.Id);
@@ -129,29 +109,22 @@ namespace Auth.Host.Pages.Account.Telegram
                 });
             }
 
-            // 9) Обновляем дату последнего входа
+            // 5) Обновляем дату последнего входа
             telegram.LastLoginDate = DateTime.UtcNow;
-            await _telegramRepo.UpdateAsync(telegram);
+            await _telegramRepo.UpdateAsync(telegram, ct);
 
-            // 10) Выполняем вход
+            // 6) Входим
             await _signInManager.SignInAsync(user, isPersistent: true);
 
-            // 11) Редирект
             var targetUrl = SafeReturn(q.ReturnUrl);
-            _log.LogInformation("TelegramLogin: success for user {userId}, redirecting to {url}",
-                user.Id, targetUrl);
-
+            _log.LogInformation("TelegramLogin: success for user {userId}, redirecting to {url}", user.Id, targetUrl);
             return LocalRedirect(targetUrl);
         }
 
         private string SafeReturn(string? url)
         {
-            if (string.IsNullOrWhiteSpace(url))
-                return "/";
-
-            if (!Url.IsLocalUrl(url))
-                return "/";
-
+            if (string.IsNullOrWhiteSpace(url)) return "/";
+            if (!Url.IsLocalUrl(url)) return "/";
             return url;
         }
     }

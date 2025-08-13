@@ -81,7 +81,7 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers.Add(
         "Content-Security-Policy",
-        "frame-ancestors https://*.telegram.org"
+        "frame-ancestors https://*"
     );
     await next();
 });

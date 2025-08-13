@@ -1,7 +1,9 @@
-﻿using Auth.Application.Interfaces;
-using Auth.Application.UseCases.Telegram.Utils;
+﻿using Auth.Application;
+using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
-using Auth.Shared.Contracts;
+using Auth.TelegramAuth.Interface;
+using Auth.TelegramAuth.Raw;
+// Result — как у тебя в Application (Auth.Application\UseCases\Telegram\Result.cs)
 
 namespace Auth.Application.UseCases.Telegram;
 
@@ -9,57 +11,41 @@ public class BindTelegramCommand
 {
     private readonly ITelegramRepository _telegramRepo;
     private readonly IUserRepository _userRepo;
-    private readonly ITelegramAuthVerifier _verifier;
-    private readonly ITelegramPayloadValidator _payloadValidator;
+    private readonly ITelegramAuthService _tg; // новый сервис валидации
 
     public BindTelegramCommand(
         ITelegramRepository telegramRepo,
         IUserRepository userRepo,
-        ITelegramAuthVerifier verifier,
-        ITelegramPayloadValidator payloadValidator)
+        ITelegramAuthService tg)
     {
-        _telegramRepo = telegramRepo;
-        _userRepo = userRepo;
-        _verifier = verifier;
-        _payloadValidator = payloadValidator;
+        _telegramRepo = telegramRepo ?? throw new ArgumentNullException(nameof(telegramRepo));
+        _userRepo = userRepo ?? throw new ArgumentNullException(nameof(userRepo));
+        _tg = tg ?? throw new ArgumentNullException(nameof(tg));
     }
 
     /// <summary>
-    /// botToken передаём из контроллера (Infrastructure) — Application не знает про секреты/опции.
+    /// Привязка Telegram-аккаунта к текущему пользователю по данным Login Widget.
+    /// dto — это параметры с колбэка виджета (id, username, first_name, last_name, photo_url, auth_date, hash).
     /// </summary>
     public async Task<Result> ExecuteAsync(
         Guid currentUserId,
         TelegramRawData dto,
-        string botToken,
         CancellationToken ct = default)
     {
-        // 0) TTL / базовая валидация (общая логика, без знания конфигов)
-        var ttlCheck = _payloadValidator.ValidateBasics(dto.Id, dto.AuthDate, skewSeconds: 60);
-        if (ttlCheck != TelegramPayloadCheck.Ok)
-        {
-            var reason = ttlCheck switch
-            {
-                TelegramPayloadCheck.Stale => "stale auth_date",
-                TelegramPayloadCheck.BadNumeric => "bad numeric fields",
-                TelegramPayloadCheck.MissingFields => "missing fields",
-                _ => "invalid"
-            };
-            return Result.Fail(reason);
-        }
-
-        // 1) Подпись (секрет отдаёт контроллер)
-        if (!_verifier.Verify(dto, botToken))
-            return Result.Fail("bad signature");
+        // 1) Криптографическая валидация Login Widget (TTL, подпись, формат).
+        if (!_tg.VerifyWidget(dto, out var err))
+            return Result.Fail(err ?? "bad signature");
 
         // 2) TG-ID уже у другого пользователя?
-        var existingByTg = await _telegramRepo.GetByTelegramIdAsync(dto.Id, ct);
+        //    ITelegramRepository — твой текущий контракт.  ✔
+        var existingByTg = await _telegramRepo.GetByTelegramIdAsync(dto.Id, ct); // :contentReference[oaicite:0]{index=0}
         if (existingByTg is not null && existingByTg.UserId != currentUserId)
             return Result.Fail("Этот Telegram уже привязан к другому аккаунту");
 
-        // 3) Пользователь валиден/активен?
-        var user = await _userRepo.GetByIdAsync(currentUserId, ct);
-        if (user is null || !user.IsActive)
-            return Result.Fail("Пользователь не найден или не активен");
+        // 3) Проверим пользователя
+        var user = await _userRepo.GetByIdAsync(currentUserId, ct); // :contentReference[oaicite:1]{index=1}
+        if (user is null || !user.IsActive) // IsActive — у тебя есть в сущности.  ✔
+            return Result.Fail("Пользователь не найден или не активен"); // :contentReference[oaicite:2]{index=2}
 
         // 4) Нормализуем username
         var username = (dto.Username ?? string.Empty).Trim();
@@ -67,15 +53,16 @@ public class BindTelegramCommand
         username = username.ToLowerInvariant();
 
         // 5) Создаём/обновляем привязку
-        var myTg = await _telegramRepo.GetByUserIdAsync(currentUserId, ct);
+        var myTg = await _telegramRepo.GetByUserIdAsync(currentUserId, ct); // :contentReference[oaicite:3]{index=3}
         if (myTg is null)
         {
             var entity = new TelegramEntity
             {
                 TelegramId = dto.Id,
-                FirstName = dto.FirstName,
+                FirstName = dto.FirstName ?? string.Empty,
+                LastName = dto.LastName ?? string.Empty,
                 Username = username,
-                PhotoUrl = dto.PhotoUrl ?? "",
+                PhotoUrl = dto.PhotoUrl ?? string.Empty,
                 UserId = currentUserId,
                 BoundAt = DateTime.UtcNow,
                 LastLoginDate = DateTime.UtcNow
@@ -83,7 +70,7 @@ public class BindTelegramCommand
 
             try
             {
-                await _telegramRepo.AddAsync(entity, ct);
+                await _telegramRepo.AddAsync(entity, ct); // :contentReference[oaicite:4]{index=4}
             }
             catch
             {
@@ -93,13 +80,14 @@ public class BindTelegramCommand
         else
         {
             myTg.FirstName = dto.FirstName ?? myTg.FirstName;
+            myTg.LastName = dto.LastName ?? myTg.LastName;
             myTg.Username = string.IsNullOrEmpty(username) ? myTg.Username : username;
             myTg.PhotoUrl = dto.PhotoUrl ?? myTg.PhotoUrl;
             myTg.LastLoginDate = DateTime.UtcNow;
 
             try
             {
-                await _telegramRepo.UpdateAsync(myTg, ct);
+                await _telegramRepo.UpdateAsync(myTg, ct); // :contentReference[oaicite:5]{index=5}
             }
             catch
             {

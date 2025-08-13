@@ -7,9 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Auth.Domain\Auth.Domain.csproj" />
-    <ProjectReference Include="..\Auth.Shared.Contracts\Auth.Shared.Contracts.csproj" />
-    <ProjectReference Include="..\Auth.TelegramAuth\Auth.TelegramAuth.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0-preview.7.25380.108" />
   </ItemGroup>
 
 </Project>

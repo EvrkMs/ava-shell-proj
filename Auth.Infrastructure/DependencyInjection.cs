@@ -1,15 +1,17 @@
 ﻿using Auth.Application.Interfaces;
-using Auth.Application.UseCases.Telegram.Utils;
+using Auth.Application.UseCases.Telegram;
 using Auth.Domain.Entities;
 using Auth.EntityFramework.Data;
 using Auth.EntityFramework.Repositories;
-using Auth.Infrastructure.Telegram;
 using Auth.Shared.Contracts;
+using Auth.TelegramAuth;            // наш новый сервис
+using Auth.TelegramAuth.Interface;
+using Auth.TelegramAuth.Options;
+using Auth.TelegramAuth.Service;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
 
@@ -19,17 +21,21 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
+        // 1) Настраиваем Options из секции
         services.Configure<TelegramAuthOptions>(config.GetSection("Telegram"));
-        services.AddSingleton(resolver => resolver.GetRequiredService<IOptions<TelegramAuthOptions>>().Value);
 
-        services.AddSingleton<ITelegramAuthVerifier, TelegramAuthVerifier>();
-        services.AddSingleton<ITelegramPayloadValidator, TelegramPayloadValidator>();
+        // 2) Регистрируем сервис, который возьмёт IOptions<TelegramAuthOptions>
+        services.AddSingleton<ITelegramAuthService>(sp =>
+        {
+            var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramAuthOptions>>().Value;
+            return new TelegramAuthService(opt);
+        });
 
-        // DbContext
+        // === DbContext ===
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
 
-        // ASP.NET Identity
+        // === ASP.NET Identity ===
         services.AddIdentity<UserEntity, IdentityRole<Guid>>(options =>
         {
             options.Password.RequireDigit = true;
@@ -48,7 +54,6 @@ public static class DependencyInjection
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
 
-        // Настройка cookie для Identity
         services.ConfigureApplicationCookie(options =>
         {
             options.LoginPath = "/Account/Login";
@@ -59,7 +64,7 @@ public static class DependencyInjection
             options.SlidingExpiration = true;
         });
 
-        // Авторизационные политики
+        // === Политики ===
         services.AddAuthorizationBuilder()
           .AddPolicy("Api", p => p.RequireAssertion(ctx => ctx.User.HasScope(ApiScopes.Api)))
           .AddPolicy("ApiRead", p => p.RequireAssertion(ctx =>
@@ -67,7 +72,7 @@ public static class DependencyInjection
           .AddPolicy("ApiWrite", p => p.RequireAssertion(ctx =>
                ctx.User.HasScope(ApiScopes.ApiWrite) || ctx.User.HasScope(ApiScopes.Api)));
 
-        // OpenIddict
+        // === OpenIddict ===
         services.AddOpenIddict()
             .AddCore(opt =>
             {
@@ -108,13 +113,13 @@ public static class DependencyInjection
             {
                 opt.UseLocalServer();
                 opt.UseAspNetCore();
-
                 opt.AddAudiences("computerclub_api");
             });
 
-        // Репозитории и сервисы
+        // === Репозитории и сервисы ===
         services.AddScoped<ITelegramRepository, TelegramRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+
         services.AddTransient<CustomSignInManager>();
 
         return services;

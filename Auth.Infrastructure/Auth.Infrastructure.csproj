@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Auth.EntityFramework\Auth.EntityFramework.csproj" />
+    <ProjectReference Include="..\Auth.TelegramAuth\Auth.TelegramAuth.csproj" />
   </ItemGroup>
 
 </Project>

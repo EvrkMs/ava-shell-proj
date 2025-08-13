@@ -1,8 +1,10 @@
-using System.Security.Claims;
+п»їusing System.Security.Claims;
 using System.Text.Encodings.Web;
 using Auth.Application.UseCases.Telegram;
 using Auth.Domain.Entities;
 using Auth.Shared.Contracts;
+using Auth.TelegramAuth.Interface; // TelegramRawData
+using Auth.TelegramAuth.Raw;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -15,16 +17,13 @@ public class TelegramBindModel : PageModel
 {
     private readonly BindTelegramCommand _bindTelegram;
     private readonly UserManager<UserEntity> _userManager;
-    private readonly string _botToken;
 
     public TelegramBindModel(
         BindTelegramCommand bindTelegram,
-        UserManager<UserEntity> userManager,
-        IConfiguration cfg)
+        UserManager<UserEntity> userManager)
     {
         _bindTelegram = bindTelegram;
         _userManager = userManager;
-        _botToken = cfg["Telegram:BotToken"] ?? "";
     }
 
     [BindProperty(SupportsGet = true)]
@@ -38,16 +37,15 @@ public class TelegramBindModel : PageModel
 
     public void OnGet() { }
 
-    [IgnoreAntiforgeryToken] // GET запрос от Telegram widget не имеет антифоргери токена
+    // GET РѕС‚ Telegram Login Widget
+    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> OnGetVerifyAsync(
         string id, string first_name, string last_name, string username,
-        string photo_url, long auth_date, string hash, string? returnUrl)
+        string photo_url, long auth_date, string hash, string? returnUrl, CancellationToken ct)
     {
-        // Получаем текущего пользователя через UserManager
         var currentUser = await _userManager.GetUserAsync(User);
         if (currentUser == null)
         {
-            // Если пользователь не авторизован, отправляем на логин
             return RedirectToPage("/Account/Login", new
             {
                 returnUrl = Url.Page("/Account/Telegram/TelegramBind", new { returnUrl = returnUrl ?? "/" }),
@@ -55,51 +53,42 @@ public class TelegramBindModel : PageModel
             });
         }
 
-        // Проверяем, активен ли пользователь
         if (!currentUser.IsActive)
         {
             return RedirectToPage("/Account/Telegram/TelegramBind", new
             {
                 returnUrl = returnUrl,
-                error = "Учетная запись неактивна"
+                error = "РЈС‡РµС‚РЅР°СЏ Р·Р°РїРёСЃСЊ РЅРµР°РєС‚РёРІРЅР°"
             });
         }
 
-        // Создаем DTO для привязки
-        var dto = new TelegramRawData(
-            Id: long.Parse(id),
-            Username: username,
-            FirstName: first_name,
-            LastName: last_name,
-            PhotoUrl: photo_url,
-            AuthDate: auth_date,
-            Hash: hash
-        );
+        var dto = new TelegramRawData()
+        {
+            Id = long.Parse(id),
+            Username = username,
+            FirstName = first_name,
+            LastName = last_name,
+            PhotoUrl = photo_url,
+            AuthDate = auth_date,
+            Hash = hash
+        };
 
-        // Выполняем привязку
-        var result = await _bindTelegram.ExecuteAsync(
-            currentUser.Id,
-            dto,
-            _botToken,
-            CancellationToken.None);
+        // РќРѕРІР°СЏ РєРѕРјР°РЅРґР° СѓР¶Рµ СЃР°РјР° РІС‹Р·С‹РІР°РµС‚ ITelegramAuthService в†’ BotToken РЅРµ РЅСѓР¶РµРЅ
+        var result = await _bindTelegram.ExecuteAsync(currentUser.Id, dto, ct);
 
         if (result.Success)
         {
-            // Успешная привязка
             return RedirectToPage("/Account/Telegram/TelegramBind", new
             {
                 returnUrl = returnUrl,
-                message = "Telegram успешно привязан!"
+                message = "Telegram СѓСЃРїРµС€РЅРѕ РїСЂРёРІСЏР·Р°РЅ!"
             });
         }
-        else
+
+        return RedirectToPage("/Account/Telegram/TelegramBind", new
         {
-            // Ошибка привязки
-            return RedirectToPage("/Account/Telegram/TelegramBind", new
-            {
-                returnUrl = returnUrl,
-                error = result.Error ?? "Не удалось привязать Telegram"
-            });
-        }
+            returnUrl = returnUrl,
+            error = result.Error ?? "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРІСЏР·Р°С‚СЊ Telegram"
+        });
     }
 }
