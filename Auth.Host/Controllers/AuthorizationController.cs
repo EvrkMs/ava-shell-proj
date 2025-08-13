@@ -1,5 +1,4 @@
 ﻿// Auth.Host\Controllers\AuthorizationController.cs
-using System.Collections.Immutable;
 using System.Security.Claims;
 using Auth.Domain.Entities;
 using Microsoft.AspNetCore;
@@ -7,7 +6,6 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;

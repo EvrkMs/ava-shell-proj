@@ -13,9 +13,9 @@ public static class OpenIddictSeeder
         var appMgr = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 
         // --- Scopes ---
-        await EnsureScopeAsync(scopeMgr, "openid", "OpenID Connect");        
-        await EnsureScopeAsync(scopeMgr, "profile", "Profile");              
-        await EnsureScopeAsync(scopeMgr, "telegram", "Telegram profile");    
+        await EnsureScopeAsync(scopeMgr, "openid", "OpenID Connect");
+        await EnsureScopeAsync(scopeMgr, "profile", "Profile");
+        await EnsureScopeAsync(scopeMgr, "telegram", "Telegram profile");
 
         await EnsureScopeAsync(scopeMgr, "api", "Full access to Computer Club API", ["computerclub_api"]);
         await EnsureScopeAsync(scopeMgr, "api:read", "Read-only access", ["computerclub_api"]);

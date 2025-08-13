@@ -6,7 +6,6 @@ using Auth.Application.Interfaces;
 public class UnbindTelegramCommand
 {
     private readonly ITelegramRepository _telegramRepo;
-
     public UnbindTelegramCommand(ITelegramRepository telegramRepo)
     {
         _telegramRepo = telegramRepo;
@@ -18,7 +17,14 @@ public class UnbindTelegramCommand
         if (tg == null)
             return Result.Fail("not bound");
 
-        await _telegramRepo.RemoveAsync(tg, ct);
-        return Result.Ok();
+        try
+        {
+            await _telegramRepo.RemoveAsync(tg, ct);
+            return Result.Ok();
+        }
+        catch
+        {
+            return Result.Fail("Не удалось отвязать.");
+        }
     }
 }

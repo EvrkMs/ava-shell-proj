@@ -1,10 +1,9 @@
 ﻿using Auth.Application.Interfaces;
-using Auth.Application.UseCases.Telegram;
 using Auth.Domain.Entities;
 using Auth.EntityFramework.Data;
 using Auth.EntityFramework.Repositories;
+using Auth.Infrastructure.Data;
 using Auth.Shared.Contracts;
-using Auth.TelegramAuth;            // наш новый сервис
 using Auth.TelegramAuth.Interface;
 using Auth.TelegramAuth.Options;
 using Auth.TelegramAuth.Service;
@@ -13,7 +12,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OpenIddict.Abstractions;
-using OpenIddict.Validation.AspNetCore;
 
 namespace Auth.Infrastructure;
 
@@ -30,6 +28,8 @@ public static class DependencyInjection
             var opt = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramAuthOptions>>().Value;
             return new TelegramAuthService(opt);
         });
+
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // === DbContext ===
         services.AddDbContext<AppDbContext>(options =>

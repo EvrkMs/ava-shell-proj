@@ -1,9 +1,5 @@
-﻿using System.Security.Claims;
-using System.Text.Encodings.Web;
-using Auth.Application.UseCases.Telegram;
+﻿using Auth.Application.UseCases.Telegram;
 using Auth.Domain.Entities;
-using Auth.Shared.Contracts;
-using Auth.TelegramAuth.Interface; // TelegramRawData
 using Auth.TelegramAuth.Raw;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;

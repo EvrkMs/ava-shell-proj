@@ -1,7 +1,6 @@
 ﻿using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Infrastructure;
-using Auth.Shared.Contracts;
 using Auth.TelegramAuth.Interface; // ITelegramAuthService, TelegramRawData
 using Auth.TelegramAuth.Raw;
 using Microsoft.AspNetCore.Authorization;
