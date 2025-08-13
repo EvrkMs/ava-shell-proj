@@ -5,5 +5,6 @@ export const ENV = {
     AUTH_SILENT_REDIRECT_URI: import.meta.env.VITE_AUTH_SILENT_REDIRECT_URI as string,
     AUTH_POST_LOGOUT_REDIRECT_URI: import.meta.env.VITE_AUTH_POST_LOGOUT_REDIRECT_URI as string,
     API_BASE: import.meta.env.VITE_API_BASE as string,
+    NODE_ENV: import.meta.env.NODE_ENV as string,
   };
   

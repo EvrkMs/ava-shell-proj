@@ -25,3 +25,5 @@ dist-ssr
 
 .env
 dev-dist/
+
+_project-extract.output.txt
