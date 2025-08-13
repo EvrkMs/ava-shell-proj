@@ -10,7 +10,11 @@ import {
   Typography,
   Stack,
   Divider,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
+
+import { setAuthToken, validateToken } from "../api";
 
 function a11yProps(index: number) {
   return {
@@ -57,6 +61,39 @@ const Home: React.FC = () => {
   const { state } = useAuth();
   const [tab, setTab] = React.useState(0);
 
+  // Результат проверки токена
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [whoami, setWhoami] = React.useState<any>(null);
+
+  // При смене токена в контексте — проставим его в axios
+  React.useEffect(() => {
+    setAuthToken(state.accessToken); // если у тебя другое имя поля — подставь
+  }, [state.accessToken]);
+
+  const onCheck = async () => {
+    setError(null);
+    setWhoami(null);
+    setLoading(true);
+    try {
+      if (!state.isAuthenticated || !state.accessToken) {
+        setError("Нет токена. Войдите в систему.");
+        return;
+      }
+      // Вызов эндпоинта валидности; по умолчанию /whoami (см. api.ts)
+      const data = await validateToken(state.accessToken);
+      setWhoami(data);
+    } catch (e: any) {
+      // Обработаем типичные статусы
+      const status = e?.response?.status;
+      if (status === 401) setError("401 Unauthorized — токен невалиден или истёк.");
+      else if (status === 403) setError("403 Forbidden — недостаточно прав (scope/role).");
+      else setError(e?.message ?? "Ошибка проверки токена.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
@@ -79,15 +116,54 @@ const Home: React.FC = () => {
           scrollButtons="auto"
         >
           <Tab label="Пользователи" {...a11yProps(0)} />
-          {/* будущие вкладки:
-             <Tab label="Роли" {...a11yProps(1)} />
-             <Tab label="Аудит" {...a11yProps(2)} />
-          */}
+          <Tab label="Проверка сервиса валидности токена" {...a11yProps(1)} />
         </Tabs>
 
         <Box sx={{ p: 2 }}>
           <TabPanel value={tab} index={0}>
             <UsersStub />
+          </TabPanel>
+
+          <TabPanel value={tab} index={1}>
+            <Stack spacing={2}>
+              <Typography variant="h6">Проверка валидности access-токена</Typography>
+
+              {!state.isAuthenticated && (
+                <Alert severity="info">
+                  Вы не авторизованы. Нажмите «Войти» вверху, затем повторите проверку.
+                </Alert>
+              )}
+
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="contained"
+                  onClick={onCheck}
+                  disabled={loading || !state.accessToken}
+                >
+                  {loading ? <CircularProgress size={22} /> : "Проверить"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setWhoami(null);
+                    setError(null);
+                  }}
+                >
+                  Очистить
+                </Button>
+              </Stack>
+
+              {error && <Alert severity="error">{error}</Alert>}
+
+              {whoami && (
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom>Результат</Typography>
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {JSON.stringify(whoami, null, 2)}
+                  </pre>
+                </Paper>
+              )}
+            </Stack>
           </TabPanel>
         </Box>
       </Paper>

@@ -114,13 +114,6 @@ export default defineConfig({
       protocol: "wss",
       path: "/hmr",
     },
-    // Добавляем заголовки для поддержки iframe (Telegram WebApp)
-    headers: {
-      'X-Frame-Options': 'ALLOWALL',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    },
   },
   
   // Настройки для SPA и iframe
@@ -129,19 +122,5 @@ export default defineConfig({
   // Дополнительные настройки для iframe
   define: {
     global: 'globalThis',
-  },
-  
-  // Настройки для продакшена
-  preview: {
-    headers: {
-      'X-Frame-Options': 'ALLOWALL',
-      'Content-Security-Policy': `
-        default-src 'self';
-        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org;
-        img-src 'self' data: https:;
-        connect-src 'self' https:;
-        frame-ancestors *;
-      `.replace(/\s+/g, ' ').trim(),
-    },
   },
 });
