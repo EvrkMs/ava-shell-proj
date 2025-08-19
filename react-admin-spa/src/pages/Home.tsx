@@ -9,67 +9,108 @@ import {
   Tabs,
   Typography,
   Stack,
-  Divider,
   CircularProgress,
   Alert,
 } from "@mui/material";
-
+import Users from "./HomeComponents/Users"; // путь под твой выбор
 import { setAuthToken, validateToken } from "../api";
 
-function a11yProps(index: number) {
+/** ===== Utils: разбор ролей из access token ===== */
+function parseJwt(token: string | null | undefined): any | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "===".slice((base64.length + 3) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function getRolesFromToken(token: string | null | undefined): string[] {
+  const payload = parseJwt(token);
+  if (!payload) return [];
+  const keys = [
+    "role",
+    "roles",
+    // классический claim для ASP.NET Identity
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+  ];
+  const roles: string[] = [];
+  for (const k of keys) {
+    const v = (payload as any)[k];
+    if (!v) continue;
+    if (Array.isArray(v)) roles.push(...v.map(String));
+    else roles.push(String(v));
+  }
+  // нормализуем регистр, убираем дубликаты
+  return Array.from(new Set(roles.map((r) => r.trim()))).filter(Boolean);
+}
+
+function hasRootRole(token: string | null | undefined): boolean {
+  const roles = getRolesFromToken(token).map((r) => r.toLowerCase());
+  return roles.includes("root");
+}
+
+/** ===== a11y-хелперы (со строковыми value) ===== */
+function a11yProps(value: string) {
   return {
-    id: `home-tab-${index}`,
-    "aria-controls": `home-tabpanel-${index}`,
+    id: `home-tab-${value}`,
+    "aria-controls": `home-tabpanel-${value}`,
   };
 }
 
+/** ===== TabPanel со строковым value ===== */
 const TabPanel: React.FC<{
   children?: React.ReactNode;
-  index: number;
-  value: number;
-}> = ({ children, value, index }) => {
+  current: "users" | "check";
+  value: "users" | "check";
+}> = ({ children, current, value }) => {
+  const hidden = current !== value;
   return (
     <div
       role="tabpanel"
-      hidden={value !== index}
-      id={`home-tabpanel-${index}`}
-      aria-labelledby={`home-tab-${index}`}
+      hidden={hidden}
+      id={`home-tabpanel-${value}`}
+      aria-labelledby={`home-tab-${value}`}
     >
-      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
+      {!hidden && <Box sx={{ pt: 2 }}>{children}</Box>}
     </div>
-  );
-};
-
-const UsersStub: React.FC = () => {
-  return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack spacing={1.5}>
-        <Typography variant="h6">Список пользователей</Typography>
-        <Typography color="text.secondary">
-          Здесь будет таблица пользователей (поиск, фильтры, роли, пагинация).
-        </Typography>
-        <Divider />
-        <Typography variant="body2" color="text.secondary">
-          Статус: в разработке. Заглушка интерфейса.
-        </Typography>
-      </Stack>
-    </Paper>
   );
 };
 
 const Home: React.FC = () => {
   const { state } = useAuth();
-  const [tab, setTab] = React.useState(0);
+
+  // Проставляем токен в axios при изменении
+  React.useEffect(() => {
+    setAuthToken(state.accessToken);
+  }, [state.accessToken]);
+
+  // Определяем, есть ли роль Root
+  const isRoot = React.useMemo(
+    () => hasRootRole(state.accessToken),
+    [state.accessToken]
+  );
+
+  // Текущее значение таба делаем строковым.
+  // Если при монтировании есть роль — по умолчанию "users", иначе — "check".
+  const [tab, setTab] = React.useState<"users" | "check">(
+    isRoot ? "users" : "check"
+  );
+
+  // Если роль пропала, но открыт "users" — переключаем на "check".
+  React.useEffect(() => {
+    if (!isRoot && tab === "users") setTab("check");
+  }, [isRoot, tab]);
 
   // Результат проверки токена
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [whoami, setWhoami] = React.useState<any>(null);
-
-  // При смене токена в контексте — проставим его в axios
-  React.useEffect(() => {
-    setAuthToken(state.accessToken); // если у тебя другое имя поля — подставь
-  }, [state.accessToken]);
 
   const onCheck = async () => {
     setError(null);
@@ -80,11 +121,9 @@ const Home: React.FC = () => {
         setError("Нет токена. Войдите в систему.");
         return;
       }
-      // Вызов эндпоинта валидности; по умолчанию /whoami (см. api.ts)
       const data = await validateToken(state.accessToken);
       setWhoami(data);
     } catch (e: any) {
-      // Обработаем типичные статусы
       const status = e?.response?.status;
       if (status === 401) setError("401 Unauthorized — токен невалиден или истёк.");
       else if (status === 403) setError("403 Forbidden — недостаточно прав (scope/role).");
@@ -96,9 +135,16 @@ const Home: React.FC = () => {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
         <Box>
-          <Typography variant="h4" gutterBottom>Главная</Typography>
+          <Typography variant="h4" gutterBottom>
+            Главная
+          </Typography>
         </Box>
         {!state.isAuthenticated && (
           <Button variant="outlined" component={Link} to="/login">
@@ -115,16 +161,23 @@ const Home: React.FC = () => {
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab label="Пользователи" {...a11yProps(0)} />
-          <Tab label="Проверка сервиса валидности токена" {...a11yProps(1)} />
+          {isRoot && <Tab label="Пользователи" value="users" {...a11yProps("users")} />}
+          <Tab
+            label="Проверка сервиса валидности токена"
+            value="check"
+            {...a11yProps("check")}
+          />
         </Tabs>
 
         <Box sx={{ p: 2 }}>
-          <TabPanel value={tab} index={0}>
-            <UsersStub />
-          </TabPanel>
+          {/* Вкладка Пользователи доступна только Root */}
+          {isRoot && (
+            <TabPanel current={tab} value="users">
+              <Users />
+            </TabPanel>
+          )}
 
-          <TabPanel value={tab} index={1}>
+          <TabPanel current={tab} value="check">
             <Stack spacing={2}>
               <Typography variant="h6">Проверка валидности access-токена</Typography>
 
@@ -157,8 +210,12 @@ const Home: React.FC = () => {
 
               {whoami && (
                 <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="subtitle1" gutterBottom>Результат</Typography>
-                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Результат
+                  </Typography>
+                  <pre
+                    style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                  >
                     {JSON.stringify(whoami, null, 2)}
                   </pre>
                 </Paper>
