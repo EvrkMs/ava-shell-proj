@@ -27,3 +27,4 @@ dist-ssr
 dev-dist/
 
 _project-extract.output.txt
+.vscode/
