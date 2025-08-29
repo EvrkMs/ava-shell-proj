@@ -15,13 +15,22 @@ var cfg = builder.Configuration;
 
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 
-// --- Application + Infrastructure ---
+// Application + Infrastructure
 services.AddApplication();
 services.AddInfrastructure(cfg);
-// --- Razor Pages и API контроллеры ---
+
+// Razor Pages + API controllers
 services.AddRazorPages();
-services.AddControllers();
+services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: true));
+        o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
+
 services.AddScoped<IOpenIddictProfileService, OpenIddictProfileService>();
+
+// Smart authentication scheme: OpenIddict validation for API, Cookies otherwise
 services.AddAuthentication(options =>
 {
     options.DefaultScheme = "smart";
@@ -38,13 +47,9 @@ services.AddAuthentication(options =>
 
         return IdentityConstants.ApplicationScheme;
     };
-
 });
-// --- Авторизация по скоупам ---
-services.AddAuthorizationBuilder()
-    .AddPolicy("ApiWrite", p => p.RequireClaim("scope", ApiScopes.ApiWrite));
 
-// --- CORS для SPA ---
+// CORS for SPA
 services.AddCors(o => o.AddPolicy("spa", p => p
     .WithOrigins("https://admin.ava-kk.ru")
     .AllowAnyHeader()
@@ -52,50 +57,28 @@ services.AddCors(o => o.AddPolicy("spa", p => p
     .AllowCredentials()
 ));
 
-// --- Antiforgery / HSTS ---
+// Antiforgery / HSTS handled at reverse proxy; set antiforgery header name here
 services.AddAntiforgery(o =>
 {
-    o.HeaderName = "X-CSRF-TOKEN"; // Можно передавать в AJAX-запросах
+    o.HeaderName = "X-CSRF-TOKEN";
 });
 
-services.AddHsts(o =>
-{
-    o.IncludeSubDomains = true;
-    o.Preload = true;
-    o.MaxAge = TimeSpan.FromDays(1);
-
-    o.ExcludedHosts.Add("localhost");
-});
-
-// --- Kestrel ---
+// Kestrel: listen HTTP internally; HTTPS is terminated by reverse proxy
 builder.WebHost.UseKestrel(o =>
 {
-    o.ListenAnyIP(5001, l =>
-    {
-        l.UseHttps();
-    });
-
+    o.ListenAnyIP(5001);
 });
-builder.Services
-    .AddControllers()
-    .AddJsonOptions(o =>
-    {
-        o.JsonSerializerOptions.Converters.Add(
-            new JsonStringEnumConverter(allowIntegerValues: true)); // и строки, и числа
-        o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-    });
+
 var app = builder.Build();
 
+// Minimal CSP to restrict embedding from specific origin
 app.Use(async (context, next) =>
 {
-    context.Response.Headers.Add(
-        "Content-Security-Policy",
-        "frame-ancestors https://*"
-    );
+    context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'self' https://admin.ava-kk.ru";
     await next();
 });
 
-// --- Forwarded headers (за прокси) ---
+// Forwarded headers (X-Forwarded-For/Proto) from reverse proxy
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
@@ -108,23 +91,17 @@ app.UseCookiePolicy(new CookiePolicyOptions
     Secure = CookieSecurePolicy.Always
 });
 
-// --- Middleware ---
-app.UseHttpsRedirection();
-
-app.UseHsts();
-
+// Pipeline
 app.UseRouting();
-
 app.UseCors("spa");
-
-app.UseAuthentication();       // JWT / Cookies
+app.UseAuthentication();
 app.UseAuthorization();
 
-// --- Endpoints ---
+// Endpoints
 app.MapControllers();
 app.MapRazorPages();
 
-// --- Миграции и сиды ---
+// Migrations + Seed
 using (var scope = app.Services.CreateScope())
 {
     var sp = scope.ServiceProvider;
@@ -132,3 +109,4 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
