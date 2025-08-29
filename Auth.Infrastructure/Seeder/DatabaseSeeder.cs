@@ -37,6 +37,9 @@ public static class DatabaseSeeder
         var userMgr = sp.GetRequiredService<UserManager<UserEntity>>();
         var existing = await userMgr.FindByNameAsync("root");
         if (existing != null) return;
+        // Only seed default root when AUTH_ROOT_PASSWORD is provided via environment
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AUTH_ROOT_PASSWORD")))
+            return;
 
         var user = new UserEntity
         {
@@ -44,7 +47,7 @@ public static class DatabaseSeeder
             FullName = "Полный доступ"
         };
 
-        var result = await userMgr.CreateAsync(user, "Root1234");
+        var result = await userMgr.CreateAsync(user, Environment.GetEnvironmentVariable("AUTH_ROOT_PASSWORD")!);
         if (result.Succeeded)
         {
             await userMgr.AddToRoleAsync(user, "Root");

@@ -20,19 +20,22 @@ namespace Auth.Host.Pages.Account.Telegram
         private readonly CustomSignInManager _signInManager;
         private readonly ITelegramAuthService _tg;
         private readonly ILogger<TelegramLoginModel> _log;
+        private readonly IUnitOfWork _unitOfWork;
 
         public TelegramLoginModel(
             ITelegramRepository telegramRepo,
             UserManager<UserEntity> userManager,
             CustomSignInManager signInManager,
             ITelegramAuthService tg,
-            ILogger<TelegramLoginModel> log)
+            ILogger<TelegramLoginModel> log,
+            IUnitOfWork unitOfWork)
         {
             _telegramRepo = telegramRepo;
             _userManager = userManager;
             _signInManager = signInManager;
             _tg = tg;
             _log = log;
+            _unitOfWork = unitOfWork;
         }
 
         public class TelegramQuery
@@ -111,6 +114,7 @@ namespace Auth.Host.Pages.Account.Telegram
             // 5) Обновляем дату последнего входа
             telegram.LastLoginDate = DateTime.UtcNow;
             await _telegramRepo.UpdateAsync(telegram, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
 
             // 6) Входим
             await _signInManager.SignInAsync(user, isPersistent: true);
