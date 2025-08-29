@@ -29,7 +29,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /https \
-    && openssl req -x509 -nodes -newkey rsa:2048 -keyout /https/https.key -out /https/https.crt -subj "/CN=localhost" -days 3650 \
+    && echo "[req]\nreq_extensions = v3_req\ndistinguished_name = req_distinguished_name\n[req_distinguished_name]\n[v3_req]\nkeyUsage = keyEncipherment, dataEncipherment\nextendedKeyUsage = serverAuth\nsubjectAltName = @alt_names\n[alt_names]\nDNS.1 = localhost\nDNS.2 = auth\nDNS.3 = auth-host" > /https/openssl.cnf \
+    && openssl req -x509 -nodes -newkey rsa:2048 -keyout /https/https.key -out /https/https.crt -subj "/CN=auth" -days 3650 -config /https/openssl.cnf -extensions v3_req \
     && openssl pkcs12 -export -out /https/https.pfx -inkey /https/https.key -in /https/https.crt -passout pass:${KESTREL_CERT_PASSWORD}
 
 # Configure ASP.NET Core
@@ -44,4 +45,3 @@ COPY --from=build /app/publish ./
 EXPOSE 5001
 
 ENTRYPOINT ["dotnet", "Auth.Host.dll"]
-
