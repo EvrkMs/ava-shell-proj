@@ -17,6 +17,7 @@
     <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.0.0" />
     <PackageReference Include="OpenIddict.Server.AspNetCore" Version="7.0.0" />
     <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="7.0.0" />
+    <PackageReference Include="OpenIddict.Validation.DataProtection" Version="7.0.0" />
     <PackageReference Include="OpenIddict.Validation.ServerIntegration" Version="7.0.0" />
   </ItemGroup>
 

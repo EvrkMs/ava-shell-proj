@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography.X509Certificates;
 using OpenIddict.Abstractions;
 
 namespace Auth.Infrastructure;
@@ -71,7 +72,6 @@ public static class DependencyInjection
                ctx.User.HasScope(ApiScopes.Api) || ctx.User.HasScope(ApiScopes.ApiRead)))
           .AddPolicy("ApiWrite", p => p.RequireAssertion(ctx =>
                ctx.User.HasScope(ApiScopes.ApiWrite) || ctx.User.HasScope(ApiScopes.Api)));
-
         // === OpenIddict ===
         services.AddOpenIddict()
             .AddCore(opt =>
@@ -90,6 +90,8 @@ public static class DependencyInjection
                    .SetRevocationEndpointUris("/connect/revocation")
                    .SetEndSessionEndpointUris("/connect/logout");
 
+                opt.AllowClientCredentialsFlow();
+
                 opt.AllowAuthorizationCodeFlow()
                    .RequireProofKeyForCodeExchange()
                    .AllowRefreshTokenFlow();
@@ -104,8 +106,21 @@ public static class DependencyInjection
                     .EnableEndSessionEndpointPassthrough()
                     .EnableStatusCodePagesIntegration();
 
-                opt.AddDevelopmentEncryptionCertificate()
-                   .AddDevelopmentSigningCertificate();
+                // Try to load signing certificate from env/config for production
+                var signingPath = config["OpenIddict:SigningCertificate:Path"] ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PATH");
+                var signingPwd = config["OpenIddict:SigningCertificate:Password"] ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PASSWORD");
+                if (!string.IsNullOrWhiteSpace(signingPath) && File.Exists(signingPath))
+                {
+                    var cert = new X509Certificate2(signingPath, signingPwd, X509KeyStorageFlags.MachineKeySet);
+                    opt.AddSigningCertificate(cert);
+                }
+                else
+                {
+                    opt.AddDevelopmentSigningCertificate();
+                }
+
+                // Encryption certificate is optional when access token encryption is disabled
+                opt.AddDevelopmentEncryptionCertificate();
 
                 opt.DisableAccessTokenEncryption();
             })

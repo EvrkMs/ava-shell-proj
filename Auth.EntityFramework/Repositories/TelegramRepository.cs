@@ -23,18 +23,15 @@ public class TelegramRepository : ITelegramRepository
     public async Task AddAsync(TelegramEntity entity, CancellationToken ct = default)
     {
         await _db.TelegramEntities.AddAsync(entity, ct);
-        await _db.SaveChangesAsync(ct);
     }
 
     public async Task RemoveAsync(TelegramEntity entity, CancellationToken ct = default)
     {
         _db.TelegramEntities.Remove(entity);
-        await _db.SaveChangesAsync(ct);
     }
 
     public async Task UpdateAsync(TelegramEntity entity, CancellationToken ct = default)
     {
         _db.TelegramEntities.Update(entity);
-        await _db.SaveChangesAsync(ct);
     }
 }

@@ -362,3 +362,15 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /_project-extract.output.txt
+Auth.EntityFramework/Migrations/20250813194807_initcore.cs
+Auth.EntityFramework/Migrations/20250813194807_initcore.Designer.cs
+Auth.EntityFramework/Migrations/AppDbContextModelSnapshot.cs
+Auth.Host/Properties/launchSettings.json
+Auth.Host/Properties/launchSettings.json
+
+# Dotenv files
+.env
+.env.*
+.env.local
+.env.development
+.env.production

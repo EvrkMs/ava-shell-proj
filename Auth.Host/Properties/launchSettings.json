@@ -3,7 +3,10 @@
     "http": {
       "commandName": "Project",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "OIDC_SVC_REPORTING_SECRET": "a7sdh8wq7hcq87hq87ch8q7whc",
+        "OIDC_SVC_INTROSPECTOR_SECRET": "8dhv98ssdhv98e9fvh9h2vj23vjov09we",
+        "OIDC_RESOURCE_SECRET": "23tg4g4w5g5sd98vhp8hwv97w2v20vwdv"
       },
       "dotnetRunMessages": true,
       "applicationUrl": ""

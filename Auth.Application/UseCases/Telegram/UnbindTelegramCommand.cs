@@ -6,9 +6,11 @@ using Auth.Application.Interfaces;
 public class UnbindTelegramCommand
 {
     private readonly ITelegramRepository _telegramRepo;
-    public UnbindTelegramCommand(ITelegramRepository telegramRepo)
+    private readonly IUnitOfWork _unitOfWork;
+    public UnbindTelegramCommand(ITelegramRepository telegramRepo, IUnitOfWork unitOfWork)
     {
         _telegramRepo = telegramRepo;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<Result> ExecuteAsync(Guid currentUserId, CancellationToken ct = default)
@@ -20,6 +22,7 @@ public class UnbindTelegramCommand
         try
         {
             await _telegramRepo.RemoveAsync(tg, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
             return Result.Ok();
         }
         catch

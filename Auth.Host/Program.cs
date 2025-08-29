@@ -1,5 +1,7 @@
 using System.Net;
+using System.Text.Json.Serialization;
 using Auth.Application.UseCases;
+using Auth.Host.ProfileService;
 using Auth.Infrastructure;
 using Auth.Infrastructure.Seeder;
 using Auth.Shared.Contracts;
@@ -19,7 +21,7 @@ services.AddInfrastructure(cfg);
 // --- Razor Pages и API контроллеры ---
 services.AddRazorPages();
 services.AddControllers();
-
+services.AddScoped<IOpenIddictProfileService, OpenIddictProfileService>();
 services.AddAuthentication(options =>
 {
     options.DefaultScheme = "smart";
@@ -74,7 +76,14 @@ builder.WebHost.UseKestrel(o =>
     });
 
 });
-
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter(allowIntegerValues: true)); // и строки, и числа
+        o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
 var app = builder.Build();
 
 app.Use(async (context, next) =>
