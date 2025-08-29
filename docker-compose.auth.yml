@@ -16,7 +16,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
 
       # Connection strings (double underscore for nesting)
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=postgres;Username=AdminAVA;Password=${POSTGRES_PASSWORD}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=authdb_auth;Username=AdminAVA;Password=${POSTGRES_PASSWORD}
 
       # Telegram
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
@@ -40,5 +40,7 @@ services:
 networks:
   app-network:
     external: true
-    name: app-network
+    name: 
+      - app-network
+      - nginx_nginx_network
 

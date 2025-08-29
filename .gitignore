@@ -374,3 +374,4 @@ Auth.Host/Properties/launchSettings.json
 .env.local
 .env.development
 .env.production
+!.env.sample
