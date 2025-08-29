@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography.X509Certificates;
 using Auth.Application.UseCases;
 using Auth.Host.ProfileService;
 using Auth.Infrastructure;
@@ -66,7 +67,13 @@ services.AddAntiforgery(o =>
 // Kestrel: listen HTTP internally; HTTPS is terminated by reverse proxy
 builder.WebHost.UseKestrel(o =>
 {
-    o.ListenAnyIP(5001);
+    o.ListenAnyIP(5001, listen =>
+    {
+        listen.UseHttps(https =>
+        {
+            https.ServerCertificate = EphemeralCert.Create();
+        });
+    });
 });
 
 var app = builder.Build();
@@ -110,3 +117,29 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
+// Ephemeral self-signed certificate (no files, generated at startup)
+static class EphemeralCert
+{
+    public static X509Certificate2 Create()
+    {
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=auth-host",
+            rsa,
+            System.Security.Cryptography.HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+
+        var san = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder();
+        san.AddDnsName("auth-host");
+        san.AddDnsName("localhost");
+        san.AddIpAddress(IPAddress.Loopback);
+        req.CertificateExtensions.Add(san.Build());
+        req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+        req.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, false));
+
+        var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var cert = req.CreateSelfSigned(now, now.AddYears(5));
+        return new X509Certificate2(cert.Export(X509ContentType.Pfx));
+    }
+}
