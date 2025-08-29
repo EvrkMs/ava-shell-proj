@@ -111,7 +111,7 @@ public static class DependencyInjection
                 var signingPwd = config["OpenIddict:SigningCertificate:Password"] ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PASSWORD");
                 if (!string.IsNullOrWhiteSpace(signingPath) && File.Exists(signingPath))
                 {
-                    var cert = new X509Certificate2(signingPath, signingPwd, X509KeyStorageFlags.MachineKeySet);
+                    var cert = X509CertificateLoader.LoadPkcs12FromFile(signingPath, signingPwd, X509KeyStorageFlags.MachineKeySet);
                     opt.AddSigningCertificate(cert);
                 }
                 else
