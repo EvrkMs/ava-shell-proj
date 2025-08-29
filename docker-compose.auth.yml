@@ -10,6 +10,7 @@ services:
         - KESTREL_CERT_PASSWORD=${KESTREL_CERT_PASSWORD:-changeit}
     image: auth-host:latest
     container_name: auth-host
+    hostname: auth-host
     restart: always
     environment:
       # ASP.NET Core
@@ -43,4 +44,3 @@ networks:
     name: 
       - app-network
       - nginx_nginx_network
-
