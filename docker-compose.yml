@@ -1,0 +1,36 @@
+﻿services:
+  auth:
+    build:
+      context: .
+      dockerfile: Auth.Host/Dockerfile
+    image: auth-host:latest
+    container_name: auth-host
+    hostname: auth-host
+    restart: always
+    environment:
+      - ForwardedHeaders__KnownNetworks=${ForwardedHeaders__KnownNetworks}
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=auth_db;Username=AdminAVA;Password=${POSTGRES_PASSWORD}
+      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
+      - Telegram__AllowedClockSkewSeconds=60
+      - OIDC_SVC_REPORTING_SECRET=${OIDC_SVC_REPORTING_SECRET}
+      - OIDC_SVC_INTROSPECTOR_SECRET=${OIDC_SVC_INTROSPECTOR_SECRET}
+      - OIDC_RESOURCE_SECRET=${OIDC_RESOURCE_SECRET}
+      - AUTH_ROOT_PASSWORD=${AUTH_ROOT_PASSWORD}
+    expose:
+      - "5001"                     # РЅРµ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ, РЅРѕ РєР°Рє СЃР°РјРѕРґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ РѕРє
+    networks:
+      - app-network                # РІРЅСѓС‚СЂРµРЅРЅСЏСЏ СЃРµС‚СЊ РїСЂРёР»РѕР¶РµРЅРёР№
+      - nginx_network              # СЃРµС‚СЊ, РіРґРµ СЃРёРґРёС‚ nginx (С‡С‚РѕР±С‹ РѕРЅ РІРёРґРµР» auth)
+
+networks:
+  app-network:
+    external: true
+    name: app-network              # СЃСѓС‰РµСЃС‚РІСѓСЋС‰Р°СЏ user-defined СЃРµС‚СЊ
+
+  nginx_network:
+    external: true
+    name: nginx_network      # С„Р°РєС‚РёС‡РµСЃРєРѕРµ РёРјСЏ СЃРµС‚Рё РёР· СЃС‚РµРєР° nginx
+
+volumes:
+  auth_dataprotection:

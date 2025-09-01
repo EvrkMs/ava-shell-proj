@@ -1,0 +1,20 @@
+# Git / IDE
+.git
+.gitignore
+.gitattributes
+.vs
+.vscode
+
+# Build outputs
+**/bin
+**/obj
+artifacts
+out
+
+# OS / misc
+.DS_Store
+Thumbs.db
+
+# Local tooling
+_project-extract.output.txt
+

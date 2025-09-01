@@ -34,7 +34,18 @@ public static class DependencyInjection
 
         // === DbContext ===
         services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
+        {
+            var cs = config.GetConnectionString("DefaultConnection");
+            options.UseNpgsql(cs, npgsql =>
+            {
+                // Resiliency against transient DB/network issues + sane timeouts
+                npgsql.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(3),
+                    errorCodesToAdd: null);
+                npgsql.CommandTimeout(15);
+            });
+        });
 
         // === ASP.NET Identity ===
         services.AddIdentity<UserEntity, IdentityRole<Guid>>(options =>

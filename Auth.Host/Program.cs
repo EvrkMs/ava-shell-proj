@@ -1,4 +1,5 @@
 using System.Net;
+using System.Diagnostics;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using Auth.Application.UseCases;
@@ -15,7 +16,19 @@ var services = builder.Services;
 var cfg = builder.Configuration;
 
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
 
+// Bind Kestrel to HTTPS on 5001 with an in-memory self-signed certificate
+builder.WebHost.UseKestrel(o =>
+{
+    o.ListenAnyIP(5001, listen =>
+    {
+        listen.UseHttps(https =>
+        {
+            https.ServerCertificate = EphemeralCert.Create();
+        });
+    });
+});
 // Application + Infrastructure
 services.AddApplication();
 services.AddInfrastructure(cfg);
@@ -64,18 +77,6 @@ services.AddAntiforgery(o =>
     o.HeaderName = "X-CSRF-TOKEN";
 });
 
-// Kestrel: listen HTTP internally; HTTPS is terminated by reverse proxy
-builder.WebHost.UseKestrel(o =>
-{
-    o.ListenAnyIP(5001, listen =>
-    {
-        listen.UseHttps(https =>
-        {
-            https.ServerCertificate = EphemeralCert.Create();
-        });
-    });
-});
-
 var app = builder.Build();
 
 // Minimal CSP to restrict embedding from specific origin
@@ -86,11 +87,49 @@ app.Use(async (context, next) =>
 });
 
 // Forwarded headers (X-Forwarded-For/Proto) from reverse proxy
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+var fwd = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-    KnownProxies = { IPAddress.Parse("192.168.88.91") }
-});
+    RequireHeaderSymmetry = false,
+    ForwardLimit = null
+};
+fwd.KnownNetworks.Clear();
+fwd.KnownProxies.Clear();
+// Configure trusted proxies/networks and allowed hosts from configuration/env
+var knownProxiesCsv = cfg["ForwardedHeaders:KnownProxies"];
+if (!string.IsNullOrWhiteSpace(knownProxiesCsv))
+{
+    foreach (var s in knownProxiesCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+    {
+        if (IPAddress.TryParse(s, out var ip))
+            fwd.KnownProxies.Add(ip);
+    }
+}
+
+var knownNetworksCsv = cfg["ForwardedHeaders:KnownNetworks"];
+if (!string.IsNullOrWhiteSpace(knownNetworksCsv))
+{
+    foreach (var s in knownNetworksCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+    {
+        var parts = s.Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var addr) && int.TryParse(parts[1], out var prefix))
+        {
+            try { fwd.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(addr, prefix)); } catch { }
+        }
+        else if (IPAddress.TryParse(s, out var singleIp))
+        {
+            fwd.KnownProxies.Add(singleIp);
+        }
+    }
+}
+
+var allowedHostsCsv = cfg["ForwardedHeaders:AllowedHosts"];
+if (!string.IsNullOrWhiteSpace(allowedHostsCsv))
+{
+    foreach (var h in allowedHostsCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        fwd.AllowedHosts.Add(h);
+}
+app.UseForwardedHeaders(fwd);
 
 app.UseCookiePolicy(new CookiePolicyOptions
 {
@@ -104,9 +143,29 @@ app.UseCors("spa");
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Log slow requests to spot intermittent stalls
+app.Use(async (context, next) =>
+{
+    var sw = Stopwatch.StartNew();
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        sw.Stop();
+        if (sw.ElapsedMilliseconds > 1000)
+        {
+            app.Logger.LogWarning("Slow request {Method} {Path} took {Elapsed} ms, status {Status}",
+                context.Request.Method, context.Request.Path, sw.ElapsedMilliseconds, context.Response.StatusCode);
+        }
+    }
+});
+
 // Endpoints
 app.MapControllers();
 app.MapRazorPages();
+app.MapGet("/healthz", () => Results.Ok("ok"));
 
 // Migrations + Seed
 using (var scope = app.Services.CreateScope())
@@ -117,19 +176,19 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-// Ephemeral self-signed certificate (no files, generated at startup)
+// Ephemeral self-signed certificate (no files are created or required)
 static class EphemeralCert
 {
     public static X509Certificate2 Create()
     {
         using var rsa = System.Security.Cryptography.RSA.Create(2048);
-        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+        var req = new CertificateRequest(
             "CN=auth-host",
             rsa,
             System.Security.Cryptography.HashAlgorithmName.SHA256,
             System.Security.Cryptography.RSASignaturePadding.Pkcs1);
 
-        var san = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder();
+        var san = new SubjectAlternativeNameBuilder();
         san.AddDnsName("auth-host");
         san.AddDnsName("localhost");
         san.AddIpAddress(IPAddress.Loopback);
@@ -140,6 +199,7 @@ static class EphemeralCert
 
         var now = DateTimeOffset.UtcNow.AddMinutes(-5);
         var cert = req.CreateSelfSigned(now, now.AddYears(5));
+        // Rewrap to ensure Kestrel can access the private key across platforms
         return new X509Certificate2(cert.Export(X509ContentType.Pfx));
     }
 }
