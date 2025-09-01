@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+npm-debug.log*
+Dockerfile*
+docker-compose*
+# Allow build-time Vite envs to be included
+# Keep local-only overrides excluded
+.env.local
+.env.*.local
+.vscode
+.idea

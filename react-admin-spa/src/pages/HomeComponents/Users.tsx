@@ -32,6 +32,28 @@ import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import { api } from "../../api";
 
+// Normalize API errors (handles ASP.NET Core ProblemDetails)
+function getApiErrorMessage(e: any): string {
+  try {
+    const data = e?.response?.data;
+    if (typeof data === "string") return data;
+    if (data && typeof data === "object") {
+      const title = typeof (data as any).title === "string" ? (data as any).title : undefined;
+      const errors = (data as any).errors;
+      if (errors && typeof errors === "object") {
+        const firstKey = Object.keys(errors)[0];
+        const msgs = (errors as any)[firstKey];
+        const msg = Array.isArray(msgs) ? msgs.join(", ") : String(msgs ?? "");
+        return title ? `${title}: ${msg}` : msg || title || "Validation error";
+      }
+      return title || JSON.stringify(data);
+    }
+    return e?.message || "Unexpected error";
+  } catch {
+    return "Unexpected error";
+  }
+}
+
 type UserStatus = "Active" | "Inactive";
 
 type UserDto = {
@@ -71,14 +93,14 @@ const Users: React.FC = () => {
   const [cRoles, setCRoles] = useState<string[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [cBusy, setCBusy] = useState(false);
-  const [cError, setCError] = useState<string | null>(null);
+  const [cError, setCError] = useState<any>(null);
 
   // ---- change password dialog
   const [openPwd, setOpenPwd] = useState(false);
   const [pUser, setPUser] = useState<UserDto | null>(null);
   const [pPassword, setPPassword] = useState("");
   const [pBusy, setPBusy] = useState(false);
-  const [pError, setPError] = useState<string | null>(null);
+  const [pError, setPError] = useState<any>(null);
 
   // ---- snack
   const [snack, setSnack] = useState<string | null>(null);
@@ -139,13 +161,32 @@ const Users: React.FC = () => {
     setCBusy(true);
     setCError(null);
     try {
-      await api.post<UserDto>("/api/cruduser", {
-        userName: cUserName.trim(),
-        fullName: cFullName.trim(),
-        password: cPassword,
-        status: cStatus,
-        roles: cRoles
-      });
+      // Expect 201 Created + body: UserListItemDto, header Location: /api/cruduser/{id}
+      const res = await api.post<UserDto>(
+        "/api/cruduser",
+        {
+          userName: cUserName.trim(),
+          fullName: cFullName.trim(),
+          password: cPassword,
+          status: cStatus,
+          roles: cRoles,
+        },
+        { validateStatus: (s) => s === 201, headers: { Accept: "application/json" } }
+      );
+
+      // Use body if present; otherwise, follow Location header
+      let created: UserDto | undefined = res.data;
+      if (!created?.id) {
+        const loc = (res.headers as any)["location"] ?? (res.headers as any)["Location"];
+        if (typeof loc === "string" && loc) {
+          try {
+            const { data } = await api.get<UserDto>(loc);
+            created = data;
+          } catch {
+            // ignore; we'll just reload the list below
+          }
+        }
+      }
       setOpenCreate(false);
       setSnack("Пользователь создан");
       await load();
@@ -292,7 +333,11 @@ const Users: React.FC = () => {
         <DialogTitle>Создать пользователя</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            {cError && <Alert severity="error">{cError}</Alert>}
+            {cError && (
+              <Alert severity="error">
+                {typeof cError === 'string' ? cError : getApiErrorMessage({ response: { data: cError } })}
+              </Alert>
+            )}
             <TextField
               label="Логин"
               value={cUserName}
@@ -367,7 +412,11 @@ const Users: React.FC = () => {
         <DialogTitle>Смена пароля {pUser?.userName}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            {pError && <Alert severity="error">{pError}</Alert>}
+            {pError && (
+              <Alert severity="error">
+                {typeof pError === 'string' ? pError : getApiErrorMessage({ response: { data: pError } })}
+              </Alert>
+            )}
             <TextField
               label="Новый пароль"
               type="password"

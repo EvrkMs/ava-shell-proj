@@ -1,6 +1,6 @@
 // src/auth/oidc.ts
 import { UserManager, WebStorageStateStore, InMemoryWebStorage, Log } from "oidc-client-ts";
-import { ENV } from "../env";
+import { ENV, validateOidcEnv } from "../env";
 
 // Включаем логирование в режиме разработки
 if (ENV.NODE_ENV === 'development') {
@@ -37,6 +37,12 @@ function makeUserStore() {
   }
 
   return new WebStorageStateStore({ store });
+}
+
+// Extra visibility on startup
+const __envCheck = validateOidcEnv();
+if (!__envCheck.ok) {
+  console.error('[OIDC] Missing required env:', __envCheck.missing);
 }
 
 console.log('[OIDC] Configuration:', {

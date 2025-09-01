@@ -142,6 +142,13 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     try {
       setLoading(true);
       clearError();
+      const missing: string[] = [];
+      if (!ENV.AUTH_AUTHORITY) missing.push('VITE_AUTH_AUTHORITY');
+      if (!ENV.AUTH_CLIENT_ID) missing.push('VITE_AUTH_CLIENT_ID');
+      if (!ENV.AUTH_REDIRECT_URI) missing.push('VITE_AUTH_REDIRECT_URI');
+      if (missing.length) {
+        throw new Error(`OIDC is not configured. Missing: ${missing.join(', ')}`);
+      }
       await userManager.signinRedirect();
     } catch (error: any) {
       setError(error?.message || "Ошибка входа через OIDC");
