@@ -7,6 +7,7 @@ import LogoutCallback from "./pages/LogoutCallback";
 import Profile from "./pages/Profile/Profile";
 import { useAuth } from "./auth/AuthContext";
 import { AppBar, Box, Button, Container, IconButton, Toolbar, Typography, CircularProgress } from "@mui/material";
+import UpdatePrompt from "./components/UpdatePrompt";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import { ColorThemeContext } from "./theme/ColorThemeProvider";
@@ -45,6 +46,7 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
         </Toolbar>
       </AppBar>
       <Container maxWidth="md" sx={{ py: 3, flexGrow: 1 }}>
+        <UpdatePrompt />
         {children}
       </Container>
     </Box>

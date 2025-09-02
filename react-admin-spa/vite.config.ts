@@ -2,6 +2,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Build/version identifier for namespacing caches per deploy
+const APP_VERSION =
+  process.env.VITE_APP_VERSION ||
+  process.env.GITHUB_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+
 export default defineConfig({
   plugins: [
     react(),
@@ -30,6 +37,13 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Faster first load while SW is starting
+        navigationPreload: true,
+        // Clean up outdated precaches on new SW
+        cleanupOutdatedCaches: true,
+        // Activate the new SW immediately
+        clientsClaim: true,
+        skipWaiting: true,
         navigateFallback: "/index.html",
         runtimeCaching: [
           // JS/CSS чанки — SWR
@@ -40,7 +54,7 @@ export default defineConfig({
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "assets-swr",
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7, purgeOnQuotaError: true },
             },
           },
           // Шрифты — Cache First
@@ -49,7 +63,7 @@ export default defineConfig({
             handler: "CacheFirst",
             options: {
               cacheName: "fonts",
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365, purgeOnQuotaError: true },
             },
           },
           // Картинки — Cache First
@@ -58,7 +72,7 @@ export default defineConfig({
             handler: "CacheFirst",
             options: {
               cacheName: "images",
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
             },
           },
           // Тайлы для карт (OSM / Carto) — Cache First, ограничение
@@ -68,7 +82,7 @@ export default defineConfig({
             handler: "CacheFirst",
             options: {
               cacheName: "map-tiles",
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 3 },
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 3, purgeOnQuotaError: true },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -122,5 +136,6 @@ export default defineConfig({
   // Дополнительные настройки для iframe
   define: {
     global: 'globalThis',
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
 });

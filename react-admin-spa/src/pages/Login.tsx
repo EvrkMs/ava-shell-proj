@@ -38,6 +38,7 @@ const Login: React.FC = () => {
         </Alert>
       )}
       
+      
       <Stack spacing={2}>
         <Typography color="text.secondary">
           Для доступа к панели войдите через OIDC (PKCE).
