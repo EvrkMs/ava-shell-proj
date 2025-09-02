@@ -2,6 +2,10 @@ using System.Net;
 using System.Diagnostics;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography.X509Certificates;
+using System.IO.Compression;
+using System.Linq;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.AspNetCore.ResponseCompression;
 using Auth.Application.UseCases;
 using Auth.Host.ProfileService;
 using Auth.Infrastructure;
@@ -29,6 +33,7 @@ builder.WebHost.UseKestrel(o =>
         });
     });
 });
+
 // Application + Infrastructure
 services.AddApplication();
 services.AddInfrastructure(cfg);
@@ -41,6 +46,31 @@ services.AddControllers()
         o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: true));
         o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
+
+// Response compression (Brotli/Gzip) for HTML/JSON
+services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+    o.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
+    {
+        "application/json",
+        "application/problem+json"
+    });
+});
+services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+
+// Output caching: cache anonymous GETs for short time
+services.AddOutputCache(o =>
+{
+    o.AddPolicy("AnonRazor", b => b
+        .Expire(TimeSpan.FromSeconds(60))
+        .SetVaryByQuery("*")
+        .SetVaryByHeader("Accept-Encoding")
+        .SetVaryByHeader("Cookie"));
+});
 
 services.AddScoped<IOpenIddictProfileService, OpenIddictProfileService>();
 
@@ -79,11 +109,28 @@ services.AddAntiforgery(o =>
 
 var app = builder.Build();
 
-// Minimal CSP to restrict embedding from specific origin
+// CSP: allow embedding (iframe) from specific trusted origins incl. Telegram
 app.Use(async (context, next) =>
 {
-    context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'self' https://admin.ava-kk.ru";
+    // Allow override via config: Csp:FrameAncestors (space-separated list)
+    var fromCfg = cfg["Csp:FrameAncestors"];
+    var allowed = string.IsNullOrWhiteSpace(fromCfg)
+        ? "'self' https://web.telegram.org https://*.telegram.org https://t.me https://*.t.me"
+        : fromCfg;
+    context.Response.Headers["Content-Security-Policy"] = $"frame-ancestors {allowed}";
     await next();
+});
+
+// For Telegram auth pages, remove X-Frame-Options so modern CSP (frame-ancestors) rules apply.
+// This allows being embedded by Telegram WebApp while keeping other pages protected by defaults/proxy.
+app.Use(async (context, next) =>
+{
+    await next();
+    if (context.Request.Path.StartsWithSegments("/Account/Telegram"))
+    {
+        if (context.Response.Headers.ContainsKey("X-Frame-Options"))
+            context.Response.Headers.Remove("X-Frame-Options");
+    }
 });
 
 // Forwarded headers (X-Forwarded-For/Proto) from reverse proxy
@@ -138,7 +185,9 @@ app.UseCookiePolicy(new CookiePolicyOptions
 });
 
 // Pipeline
+app.UseResponseCompression();
 app.UseRouting();
+app.UseOutputCache();
 app.UseCors("spa");
 app.UseAuthentication();
 app.UseAuthorization();

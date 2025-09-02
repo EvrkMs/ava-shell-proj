@@ -1,4 +1,4 @@
-﻿using Auth.Application.UseCases.Telegram;
+using Auth.Application.UseCases.Telegram;
 using Auth.Domain.Entities;
 using Auth.TelegramAuth.Raw;
 using Microsoft.AspNetCore.Authorization;
@@ -33,8 +33,7 @@ public class TelegramBindModel : PageModel
 
     public void OnGet() { }
 
-    // GET от Telegram Login Widget
-    [IgnoreAntiforgeryToken]
+    // GET из Telegram Login Widget
     public async Task<IActionResult> OnGetVerifyAsync(
         string id, string first_name, string last_name, string username,
         string photo_url, long auth_date, string hash, string? returnUrl, CancellationToken ct)
@@ -54,7 +53,7 @@ public class TelegramBindModel : PageModel
             return RedirectToPage("/Account/Telegram/TelegramBind", new
             {
                 returnUrl = returnUrl,
-                error = "Учетная запись неактивна"
+                error = "Аккаунт пользователя неактивен"
             });
         }
 
@@ -69,7 +68,7 @@ public class TelegramBindModel : PageModel
             Hash = hash
         };
 
-        // Новая команда уже сама вызывает ITelegramAuthService → BotToken не нужен
+        // Проверка подписи/срока делается внутри ITelegramAuthService с BotToken
         var result = await _bindTelegram.ExecuteAsync(currentUser.Id, dto, ct);
 
         if (result.Success)
@@ -88,3 +87,4 @@ public class TelegramBindModel : PageModel
         });
     }
 }
+

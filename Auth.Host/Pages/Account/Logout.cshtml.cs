@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore;
+using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +16,7 @@ namespace Auth.Host.Pages.Account
 
         public void OnGet()
         {
-            // Получаем post_logout_redirect_uri из OIDC запроса
+            // Поддержка post_logout_redirect_uri из OIDC-запроса
             var request = HttpContext.GetOpenIddictServerRequest();
             if (!string.IsNullOrEmpty(request?.PostLogoutRedirectUri))
             {
@@ -29,7 +29,7 @@ namespace Auth.Host.Pages.Account
         {
             await SignOutAllAsync();
 
-            // Проверяем, есть ли OIDC post_logout_redirect_uri
+            // Приоритет — если есть OIDC post_logout_redirect_uri
             var request = HttpContext.GetOpenIddictServerRequest();
             if (!string.IsNullOrEmpty(request?.PostLogoutRedirectUri))
             {
@@ -57,3 +57,4 @@ namespace Auth.Host.Pages.Account
             => (!string.IsNullOrWhiteSpace(url) && Url.IsLocalUrl(url)) ? url! : "/";
     }
 }
+

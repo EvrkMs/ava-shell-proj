@@ -1,4 +1,4 @@
-﻿using Auth.Application.Interfaces;
+using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Infrastructure;
 using Auth.TelegramAuth.Interface; // ITelegramAuthService, TelegramRawData
@@ -52,7 +52,12 @@ namespace Auth.Host.Pages.Account.Telegram
 
         public async Task<IActionResult> OnGetAsync([FromQuery] TelegramQuery q, CancellationToken ct)
         {
-            // 1) Базовая валидация полей
+            // If page is opened directly (no Telegram params), render the page with the widget.
+            if (q.Id == 0 && q.AuthDate == 0 && string.IsNullOrWhiteSpace(q.Hash))
+            {
+                return Page();
+            }
+            // 1) Проверка обязательных полей
             if (q.Id <= 0 || q.AuthDate <= 0 || string.IsNullOrWhiteSpace(q.Hash))
             {
                 _log.LogWarning("TelegramLogin: missing fields (id={id}, auth_date={auth}, hash?={hash})",
@@ -60,7 +65,7 @@ namespace Auth.Host.Pages.Account.Telegram
                 return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = "missing_fields" });
             }
 
-            // 2) Криптопроверка подписи + TTL внутри сервиса
+            // 2) Восстановим сырые данные + проверим TTL и подпись
             var raw = new TelegramRawData()
             {
                 Id = q.Id,
@@ -78,7 +83,7 @@ namespace Auth.Host.Pages.Account.Telegram
                 return RedirectToPage("/Account/Login", new { returnUrl = q.ReturnUrl, error = sigErr ?? "invalid_signature" });
             }
 
-            // 3) Ищем привязку через репозиторий
+            // 3) Найдём привязку к учётной записи
             var telegram = await _telegramRepo.GetByTelegramIdAsync(q.Id, ct);
             if (telegram == null)
             {
@@ -111,12 +116,12 @@ namespace Auth.Host.Pages.Account.Telegram
                 });
             }
 
-            // 5) Обновляем дату последнего входа
+            // 5) Обновим дату последнего входа
             telegram.LastLoginDate = DateTime.UtcNow;
             await _telegramRepo.UpdateAsync(telegram, ct);
             await _unitOfWork.SaveChangesAsync(ct);
 
-            // 6) Входим
+            // 6) Вход
             await _signInManager.SignInAsync(user, isPersistent: true);
 
             var targetUrl = SafeReturn(q.ReturnUrl);

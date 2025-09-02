@@ -8,10 +8,13 @@ using Auth.TelegramAuth.Interface;
 using Auth.TelegramAuth.Options;
 using Auth.TelegramAuth.Service;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography;
+using System.IO;
 using OpenIddict.Abstractions;
 
 namespace Auth.Infrastructure;
@@ -76,6 +79,13 @@ public static class DependencyInjection
             options.SlidingExpiration = true;
         });
 
+        // Data Protection: persist keys to volume to keep cookies/tokens valid across restarts
+        var dpKeysDir = config["DataProtection:KeysDirectory"] ?? "/keys/dataprotection";
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(dpKeysDir))
+            .SetApplicationName("auth-host")
+            .SetDefaultKeyLifetime(TimeSpan.FromDays(90));
+
         // === Политики ===
         services.AddAuthorizationBuilder()
           .AddPolicy("Api", p => p.RequireAssertion(ctx => ctx.User.HasScope(ApiScopes.Api)))
@@ -117,15 +127,49 @@ public static class DependencyInjection
                     .EnableEndSessionEndpointPassthrough()
                     .EnableStatusCodePagesIntegration();
 
-                // Try to load signing certificate from env/config for production
-                var signingPath = config["OpenIddict:SigningCertificate:Path"] ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PATH");
-                var signingPwd = config["OpenIddict:SigningCertificate:Password"] ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PASSWORD");
-                if (!string.IsNullOrWhiteSpace(signingPath) && File.Exists(signingPath))
+                // Load signing certificate or autogenerate persistent PFX in volume if missing
+                var signingPath = config["OpenIddict:SigningCertificate:Path"]
+                                   ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PATH")
+                                   ?? "/keys/openiddict/signing.pfx";
+                var signingPwd = config["OpenIddict:SigningCertificate:Password"]
+                                  ?? Environment.GetEnvironmentVariable("OIDC_SIGNING_CERTIFICATE_PASSWORD");
+
+                try
                 {
-                    var cert = X509CertificateLoader.LoadPkcs12FromFile(signingPath, signingPwd, X509KeyStorageFlags.MachineKeySet);
-                    opt.AddSigningCertificate(cert);
+                    var dir = Path.GetDirectoryName(signingPath);
+                    if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                        Directory.CreateDirectory(dir);
+
+                    if (!File.Exists(signingPath) && !string.IsNullOrWhiteSpace(signingPwd))
+                    {
+                        using var rsa = RSA.Create(2048);
+                        var req = new CertificateRequest(
+                            new X500DistinguishedName("CN=auth-openiddict"),
+                            rsa,
+                            HashAlgorithmName.SHA256,
+                            RSASignaturePadding.Pkcs1);
+
+                        req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+                        req.CertificateExtensions.Add(new X509KeyUsageExtension(
+                            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, false));
+
+                        var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+                        using var certGen = req.CreateSelfSigned(now, now.AddYears(5));
+                        var pfxBytes = certGen.Export(X509ContentType.Pfx, signingPwd);
+                        File.WriteAllBytes(signingPath, pfxBytes);
+                    }
+
+                    if (File.Exists(signingPath) && !string.IsNullOrWhiteSpace(signingPwd))
+                    {
+                        var cert = X509CertificateLoader.LoadPkcs12FromFile(signingPath, signingPwd, X509KeyStorageFlags.MachineKeySet);
+                        opt.AddSigningCertificate(cert);
+                    }
+                    else
+                    {
+                        opt.AddDevelopmentSigningCertificate();
+                    }
                 }
-                else
+                catch
                 {
                     opt.AddDevelopmentSigningCertificate();
                 }

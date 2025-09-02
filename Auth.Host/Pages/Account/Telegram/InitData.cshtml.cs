@@ -1,8 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Auth.Application.Interfaces;     // ITelegramRepository
-using Auth.Infrastructure;           // CustomSignInManager
-using Auth.TelegramAuth.Interface;   // ITelegramAuthService
+using Auth.Infrastructure;             // CustomSignInManager
+using Auth.TelegramAuth.Interface;     // ITelegramAuthService
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -36,17 +36,16 @@ namespace Auth.Host.Pages.Account.Telegram
             public string? returnUrl { get; set; }
         }
 
-        [HttpPost]
         public async Task<IActionResult> OnPostAsync([FromBody] InitDataRequest req, CancellationToken ct)
         {
             if (!ModelState.IsValid)
                 return Fail("invalid_request", req.returnUrl, 400);
 
-            // 1) Парсинг initData
+            // 1) Разберём initData
             if (!_tg.TryParseInitData(req.initData, out var data, out var hash, out var parseErr))
                 return Fail(parseErr ?? "malformed_initData", req.returnUrl, 401);
 
-            // 2) Подпись + TTL (внутри сервиса)
+            // 2) Проверим подпись + TTL (внутри сервис сам знает пороги)
             if (!_tg.VerifyInitData(data, hash, out var verifyErr))
                 return Fail(verifyErr ?? "bad_signature", req.returnUrl, 401);
 
@@ -58,7 +57,7 @@ namespace Auth.Host.Pages.Account.Telegram
             if (tgUser is null || tgUser.id <= 0)
                 return Fail("bad_user_payload", req.returnUrl, 401);
 
-            // 4) Привязка → пользователь
+            // 4) Привязка к пользователю
             var tg = await _telegramRepo.GetByTelegramIdAsync(tgUser.id, ct);
             var appUser = tg?.User;
             if (appUser is null || !appUser.IsActive)
@@ -89,7 +88,7 @@ namespace Auth.Host.Pages.Account.Telegram
             {
                 error = code,
                 redirect = Url.Page("/Account/Login", pageHandler: null,
-                                    values: new { returnUrl = returnUrl ?? "/" },
+                                    values: new { returnUrl = returnUrl ?? "/", error = code },
                                     protocol: Request.Scheme)
             })
             { StatusCode = status };

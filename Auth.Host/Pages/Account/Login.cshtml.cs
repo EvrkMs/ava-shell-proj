@@ -1,11 +1,12 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using Auth.Infrastructure; // CustomSignInManager
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace Auth.Host.Pages.Account
 {
-    [ValidateAntiForgeryToken] // пусть висит на классе (POST защищаем)
+    [OutputCache(PolicyName = "AnonRazor")] // Кешируем GET для анонимных пользователей
     public class LoginModel : PageModel
     {
         private readonly CustomSignInManager _signInManager;
@@ -15,10 +16,10 @@ namespace Auth.Host.Pages.Account
             _signInManager = signInManager;
         }
 
-        [BindProperty, Required(ErrorMessage = "Введите имя пользователя")]
+        [BindProperty, Required(ErrorMessage = "Укажите имя пользователя")]
         public string UserName { get; set; } = string.Empty;
 
-        [BindProperty, Required(ErrorMessage = "Введите пароль")]
+        [BindProperty, Required(ErrorMessage = "Укажите пароль")]
         [DataType(DataType.Password)]
         public string Password { get; set; } = string.Empty;
 
@@ -28,9 +29,10 @@ namespace Auth.Host.Pages.Account
         [BindProperty(SupportsGet = true)]
         public string? ReturnUrl { get; set; }
 
-        [IgnoreAntiforgeryToken] // GET не требует токен
+        // GET
         public void OnGet() { }
 
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostAsync()
         {
             if (!ModelState.IsValid)
@@ -53,13 +55,13 @@ namespace Auth.Host.Pages.Account
 
             if (result.IsLockedOut)
             {
-                ModelState.AddModelError(string.Empty, "Аккаунт временно заблокирован из-за неудачных попыток.");
+                ModelState.AddModelError(string.Empty, "Пользователь временно заблокирован из-за неудачных попыток.");
                 return Page();
             }
 
             if (result.IsNotAllowed)
             {
-                // Форсим смену пароля: уводим на анонимную страницу ChangePassword
+                // Требуется смена пароля: перенаправим на страницу ChangePassword
                 var safeReturn = SafeReturnUrlOrRoot(ReturnUrl);
                 return RedirectToPage("/Account/ChangePassword", new
                 {
@@ -77,3 +79,4 @@ namespace Auth.Host.Pages.Account
             => (!string.IsNullOrWhiteSpace(url) && Url.IsLocalUrl(url)) ? url! : "/";
     }
 }
+
