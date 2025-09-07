@@ -23,6 +23,7 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
 
 // Bind Kestrel to HTTPS on 5001 with an in-memory self-signed certificate
+// Kestrel TLS: load shared cert from /tls (or generate and persist)
 builder.WebHost.UseKestrel(o =>
 {
     o.ListenAnyIP(5001, listen =>
@@ -33,7 +34,6 @@ builder.WebHost.UseKestrel(o =>
         });
     });
 });
-
 // Application + Infrastructure
 services.AddApplication();
 services.AddInfrastructure(cfg);
@@ -109,29 +109,7 @@ services.AddAntiforgery(o =>
 
 var app = builder.Build();
 
-// CSP: allow embedding (iframe) from specific trusted origins incl. Telegram
-app.Use(async (context, next) =>
-{
-    // Allow override via config: Csp:FrameAncestors (space-separated list)
-    var fromCfg = cfg["Csp:FrameAncestors"];
-    var allowed = string.IsNullOrWhiteSpace(fromCfg)
-        ? "'self' https://web.telegram.org https://*.telegram.org https://t.me https://*.t.me"
-        : fromCfg;
-    context.Response.Headers["Content-Security-Policy"] = $"frame-ancestors {allowed}";
-    await next();
-});
-
-// For Telegram auth pages, remove X-Frame-Options so modern CSP (frame-ancestors) rules apply.
-// This allows being embedded by Telegram WebApp while keeping other pages protected by defaults/proxy.
-app.Use(async (context, next) =>
-{
-    await next();
-    if (context.Request.Path.StartsWithSegments("/Account/Telegram"))
-    {
-        if (context.Response.Headers.ContainsKey("X-Frame-Options"))
-            context.Response.Headers.Remove("X-Frame-Options");
-    }
-});
+// CSP is handled by the sidecar nginx in front of this app.
 
 // Forwarded headers (X-Forwarded-For/Proto) from reverse proxy
 var fwd = new ForwardedHeadersOptions
@@ -176,6 +154,15 @@ if (!string.IsNullOrWhiteSpace(allowedHostsCsv))
     foreach (var h in allowedHostsCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
         fwd.AllowedHosts.Add(h);
 }
+
+// Allow forwarded headers from any source (trust all proxies/networks).
+// This disables the default restriction requiring a known proxy and silences Unknown proxy warnings.
+try
+{
+    fwd.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("0.0.0.0"), 0));
+    fwd.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("::"), 0));
+}
+catch { }
 app.UseForwardedHeaders(fwd);
 
 app.UseCookiePolicy(new CookiePolicyOptions
