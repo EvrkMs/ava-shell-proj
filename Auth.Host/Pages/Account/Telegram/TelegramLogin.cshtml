@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Вход через Telegram</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen flex items-center justify-center p-6 bg-slate-50">
@@ -57,11 +57,33 @@
                 var params = new URLSearchParams(location.search);
                 var returnUrl = params.get('returnUrl') || '/';
                 var tg = window.Telegram && window.Telegram.WebApp;
+                // Initialize Telegram Mini App (per docs)
                 if (tg && typeof tg.ready === 'function') { tg.ready(); }
+                try { if (tg && typeof tg.expand === 'function') tg.expand(); } catch(_) {}
+                try {
+                    if (tg) {
+                        var isDark = (tg.colorScheme === 'dark');
+                        document.documentElement.classList.toggle('dark', !!isDark);
+                        if (typeof tg.onEvent === 'function') {
+                            tg.onEvent('themeChanged', function() {
+                                var dark = (tg.colorScheme === 'dark');
+                                document.documentElement.classList.toggle('dark', !!dark);
+                            });
+                        }
+                    }
+                } catch(_) {}
 
                 function tryAutoLogin(){
                     var hasInit = tg && typeof tg.initData === 'string' && tg.initData.length > 0;
                     var inFrame = (function(){ try { return window.self !== window.top; } catch(e) { return true; } })();
+
+                    // Debug: log WebApp/initData presence (sanitized)
+                    try {
+                        var ui = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+                        console.log('[TG] WebApp context:', !!tg, 'inFrame:', inFrame, 'hasInitData:', !!hasInit,
+                            'user:', ui ? { id: ui.id, username: ui.username } : null);
+                        if (hasInit) console.debug('[TG] initData length:', tg.initData.length);
+                    } catch(_) {}
 
                     // If we are in WebApp context, prefer initData and hide widget
                     if (tg) {
@@ -86,6 +108,7 @@
                     }
 
                     // Auto-login via initData
+                    console.log('[TG] Posting initData to /Account/Telegram/InitData');
                     fetch('/Account/Telegram/InitData', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -93,6 +116,7 @@
                     })
                     .then(function(res){ return res.json().catch(function(){return {};}); })
                     .then(function(data){
+                        console.log('[TG] InitData response:', data);
                         if (data && data.redirect) { window.location.href = data.redirect; return; }
                         var loginUrl = new URL('/Account/Login', window.location.origin);
                         loginUrl.searchParams.set('returnUrl', returnUrl);
@@ -100,6 +124,7 @@
                         window.location.href = loginUrl.toString();
                     })
                     .catch(function(){
+                        console.warn('[TG] InitData POST failed');
                         var loginUrl = new URL('/Account/Login', window.location.origin);
                         loginUrl.searchParams.set('returnUrl', returnUrl);
                         loginUrl.searchParams.set('error', 'server_error');

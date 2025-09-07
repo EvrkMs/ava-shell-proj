@@ -21,6 +21,7 @@ var cfg = builder.Configuration;
 
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Cors", LogLevel.Debug);
 
 // Bind Kestrel to HTTPS on 5001 with an in-memory self-signed certificate
 // Kestrel TLS: load shared cert from /tls (or generate and persist)
@@ -174,6 +175,44 @@ app.UseCookiePolicy(new CookiePolicyOptions
 // Pipeline
 app.UseResponseCompression();
 app.UseRouting();
+// CORS logging middleware (place before UseCors to capture preflight short-circuit)
+app.Use(async (context, next) =>
+{
+    var origin = context.Request.Headers["Origin"].ToString();
+    if (!string.IsNullOrEmpty(origin))
+    {
+        var preflightMethod = context.Request.Headers["Access-Control-Request-Method"].ToString();
+        var preflightHeaders = context.Request.Headers["Access-Control-Request-Headers"].ToString();
+
+        context.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("CorsLogger")
+            .LogInformation(
+                "CORS request {Method} {Path} Origin={Origin} ACRM={ACRM} ACRH={ACRH}",
+                context.Request.Method,
+                context.Request.Path,
+                origin,
+                preflightMethod,
+                preflightHeaders);
+
+        context.Response.OnStarting(state =>
+        {
+            var http = (HttpContext)state;
+            var aco = http.Response.Headers["Access-Control-Allow-Origin"].ToString();
+            var acm = http.Response.Headers["Access-Control-Allow-Methods"].ToString();
+            var ach = http.Response.Headers["Access-Control-Allow-Headers"].ToString();
+            var acc = http.Response.Headers["Access-Control-Allow-Credentials"].ToString();
+
+            http.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("CorsLogger")
+                .LogInformation(
+                    "CORS response {Status} ACO={ACO} ACM={ACM} ACH={ACH} ACC={ACC}",
+                    http.Response.StatusCode, aco, acm, ach, acc);
+            return Task.CompletedTask;
+        }, context);
+    }
+
+    await next();
+});
 app.UseOutputCache();
 app.UseCors("spa");
 app.UseAuthentication();

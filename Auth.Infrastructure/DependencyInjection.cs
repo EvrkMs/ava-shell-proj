@@ -16,6 +16,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
 using System.IO;
 using OpenIddict.Abstractions;
+using Auth.Infrastructure.Services;
 
 namespace Auth.Infrastructure;
 
@@ -34,6 +35,8 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<ISessionService, SessionService>();
 
         // === DbContext ===
         services.AddDbContext<AppDbContext>(options =>
@@ -178,6 +181,14 @@ public static class DependencyInjection
                 opt.AddDevelopmentEncryptionCertificate();
 
                 opt.DisableAccessTokenEncryption();
+
+                // Token lifetimes (can be tuned/configured)
+                // opt.SetAccessTokenLifetime(TimeSpan.FromMinutes(5));
+                // opt.SetRefreshTokenLifetime(TimeSpan.FromDays(30));
+
+                // Optional: switch to reference access tokens (server-state + revocation)
+                // if (bool.TryParse(config["OpenIddict:UseReferenceAccessTokens"], out var useRef) && useRef)
+                //     opt.UseReferenceAccessTokens();
             })
             .AddValidation(opt =>
             {

@@ -1,4 +1,4 @@
-ï»¿// Auth.Host/ProfileService/OpenIddictProfileService.cs
+// Auth.Host/ProfileService/OpenIddictProfileService.cs
 using System.Security.Claims;
 using Auth.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -37,7 +37,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
         var identity = (ClaimsIdentity)principal.Identity!;
 
         
-        // Ð“Ð°Ñ€Ð°Ð½Ñ‚Ð¸Ñ€ÑƒÐµÐ¼ sub/name
+        // Ãàðàíòèðóåì sub/name
         identity.AddOrReplaceClaim(Claims.Subject, user.Id.ToString());
         if (!identity.HasClaim(c => c.Type == Claims.Name))
             identity.AddClaim(new Claim(Claims.Name, user.UserName ?? user.Id.ToString()));
@@ -46,7 +46,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
         foreach (var roleName in roles)
         {
             identity.TryAddRole(roleName);
-            // (Ð¾Ð¿Ñ†Ð¸Ð¾Ð½Ð°Ð»ÑŒÐ½Ð¾) claims ÑÐ°Ð¼Ð¾Ð¹ Ñ€Ð¾Ð»Ð¸:
+            // (îïöèîíàëüíî) claims ñàìîé ðîëè:
             var role = await _roleManager.FindByNameAsync(roleName);
             if (role != null)
             {
@@ -64,7 +64,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
             resources.Add(r);
         principal.SetResources(resources);
 
-        // Destinations â€” ÐºÑƒÐ´Ð° ÐºÐ°ÐºÐ¸Ðµ ÐºÐ»ÐµÐ¹Ð¼Ñ‹
+        // Destinations — êóäà êàêèå êëåéìû
         ApplyDestinations(principal);
         return principal;
     }
@@ -78,6 +78,9 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
             switch (claim.Type)
             {
                 case Claims.Subject:
+                    dest.Add(Destinations.IdentityToken);
+                    break;
+                case "sid": // "sid" per OIDC Back-Channel Logout
                     dest.Add(Destinations.IdentityToken);
                     break;
 
@@ -105,7 +108,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
                     break;
 
                 case "AspNet.Identity.SecurityStamp":
-                    dest.Clear(); // Ð½Ð¸ÐºÐ¾Ð³Ð´Ð° Ð½Ðµ Ð¾Ñ‚Ð´Ð°Ñ‘Ð¼
+                    dest.Clear(); // íèêîãäà íå îòäà¸ì
                     break;
             }
 
@@ -128,7 +131,7 @@ internal static class ClaimsIdentityRoleExtensions
 {
     public static void TryAddRole(this ClaimsIdentity identity, string roleValue)
     {
-        // ÑƒÐ¶Ðµ ÐµÑÑ‚ÑŒ "role" Ð¸Ð»Ð¸ ClaimTypes.Role Ñ Ñ‚ÐµÐ¼ Ð¶Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸ÐµÐ¼?
+        // óæå åñòü "role" èëè ClaimTypes.Role ñ òåì æå çíà÷åíèåì?
         bool hasJwtRole = identity.HasClaim(c => c.Type == OpenIddictConstants.Claims.Role && c.Value == roleValue);
         bool hasWsRole = identity.HasClaim(c => c.Type == ClaimTypes.Role && c.Value == roleValue);
 
@@ -139,3 +142,5 @@ internal static class ClaimsIdentityRoleExtensions
             identity.AddClaim(new Claim(ClaimTypes.Role, roleValue));
     }
 }
+
+
