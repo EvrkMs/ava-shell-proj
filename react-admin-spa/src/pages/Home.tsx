@@ -1,8 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import { useAuth } from "../auth/AuthContext";
-import { Link } from "react-router-dom";
-import { Box, Button, Paper, Typography, Stack, CircularProgress, Alert } from "@mui/material";
-import { setAuthToken } from "../api";
+import { Box, Paper, Typography, Stack, CircularProgress, Alert } from "@mui/material";
+
 import { hasRootRole } from "../utils/jwt";
 
 const Users = React.lazy(() => import("./HomeComponents/Users"));
@@ -10,12 +9,7 @@ const Users = React.lazy(() => import("./HomeComponents/Users"));
 const Home: React.FC = () => {
   const { state } = useAuth();
 
-  // Sync auth token to axios
-  React.useEffect(() => {
-    setAuthToken(state.accessToken);
-  }, [state.accessToken]);
-
-  const isRoot = React.useMemo(() => hasRootRole(state.accessToken), [state.accessToken]);
+    const isRoot = React.useMemo(() => hasRootRole(state.accessToken), [state.accessToken]);
 
   return (
     <Box>
@@ -24,13 +18,7 @@ const Home: React.FC = () => {
           <Typography variant="h4" gutterBottom>
             Панель администратора
           </Typography>
-        </Box>
-        {!state.isAuthenticated && (
-          <Button variant="outlined" component={Link} to="/login">
-            Войти
-          </Button>
-        )}
-      </Stack>
+        </Box>\r\n      </Stack>
 
       <Paper sx={{ width: "100%", p: 2 }} variant="outlined">
         {isRoot ? (
@@ -46,4 +34,13 @@ const Home: React.FC = () => {
 };
 
 export default Home;
+
+
+
+
+
+
+
+
+
 

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { userManager } from "./auth/oidc";
 import { ENV } from "./env";
 
 export const api = axios.create({
@@ -16,6 +17,22 @@ export function setAuthToken(token?: string) {
     delete api.defaults.headers.common["Authorization"];
   }
 }
+
+// Auto-logout on 401 responses
+api.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    try {
+      const status = error?.response?.status;
+      if (status === 401) {
+        try { await userManager.removeUser(); } catch {}
+        // Force reload to clear in-memory state and kick login if needed
+        window.location.replace("/");
+      }
+    } catch {}
+    return Promise.reject(error);
+  }
+);
 export async function validateToken(token?: string) {
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;

@@ -69,13 +69,13 @@ export const userManager = new UserManager({
 
   // OpenIddict отдаёт /connect/userinfo — можно оставлять true
   loadUserInfo: true,
-
+  
   // Хранилище с fallback
   userStore: makeUserStore(),
   revokeTokensOnSignout: true,
   
   // Обычно для SPA так и оставляют:
-  monitorSession: false,
+  monitorSession: true,
 
   // Silent renew для HashRouter может работать некорректно, отключаем пока
   automaticSilentRenew: false,

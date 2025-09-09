@@ -1,7 +1,7 @@
-import React from "react";
+﻿import React from "react";
+import { resetAppCacheThenReload } from "./utils/cache";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import Home from "./pages/Home";
-import Login from "./pages/Login";
 import Callback from "./pages/Callback";
 import LogoutCallback from "./pages/LogoutCallback";
 import Profile from "./pages/Profile/Profile";
@@ -14,7 +14,7 @@ import { ColorThemeContext } from "./theme/ColorThemeProvider";
 import { RequireAuth } from "./routes/RequireAuth";
 
 const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const { state, signout } = useAuth();
+  const { state, signinPkce, signout } = useAuth();
   const { mode, toggle } = React.useContext(ColorThemeContext);
 
   return (
@@ -25,7 +25,7 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
             Admin Panel
           </Typography>
           <Button component={Link} to="/" color="inherit">Главная</Button>
-          
+
           {state.bootstrapped && (
             <>
               {state.isAuthenticated && (
@@ -33,7 +33,7 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
               )}
 
               {!state.isAuthenticated ? (
-                <Button component={Link} to="/login" color="inherit">Войти</Button>
+                <Button onClick={() => { try { sessionStorage.setItem("post_login_return_url", window.location.pathname + window.location.search + window.location.hash); } catch {} signinPkce(); }} color="inherit">Войти</Button>
               ) : (
                 <Button onClick={signout} color="inherit">Выйти</Button>
               )}
@@ -43,6 +43,7 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
           <IconButton onClick={toggle} color="inherit" sx={{ ml: 1 }}>
             {mode === "dark" ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
+          <Button onClick={resetAppCacheThenReload} color="inherit" sx={{ ml: 1 }}>Обновить</Button>
         </Toolbar>
       </AppBar>
       <Container maxWidth="md" sx={{ py: 3, flexGrow: 1 }}>
@@ -56,7 +57,6 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
 const App: React.FC = () => {
   const { state } = useAuth();
 
-  // Показываем загрузку пока не определили состояние аутентификации
   if (!state.bootstrapped) {
     return (
       <AppShell>
@@ -71,13 +71,12 @@ const App: React.FC = () => {
     <AppShell>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
 
         {/* OIDC callbacks */}
         <Route path="/callback" element={<Callback />} />
         <Route path="/logout-callback" element={<LogoutCallback />} />
 
-        {/* Защищённые */}
+        {/* Закрытые разделы */}
         <Route
           path="/profile"
           element={
@@ -94,3 +93,7 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+
+
+

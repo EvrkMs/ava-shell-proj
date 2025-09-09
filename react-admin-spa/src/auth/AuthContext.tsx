@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   createContext,
   useCallback,
   useContext,
@@ -67,6 +67,37 @@ async function fetchUserInfo(accessToken: string) {
   return await resp.json();
 }
 
+function purgeOidcStorage(opts?: { keepCurrentUser?: boolean }) {
+  try {
+    if (typeof window === 'undefined') return;
+    const keepKey = opts?.keepCurrentUser
+      ? `oidc.user:${ENV.AUTH_AUTHORITY}:${ENV.AUTH_CLIENT_ID}`
+      : undefined;
+    const clean = (s?: Storage) => {
+      try {
+        if (!s) return;
+        const keys: string[] = [];
+        for (let i = 0; i < s.length; i++) {
+          const k = s.key(i);
+          if (k) keys.push(k);
+        }
+        for (const k of keys) {
+          const isOidc = k.startsWith('oidc.');
+          const isUser = k.startsWith('oidc.user:');
+          const keep = keepKey && k === keepKey;
+          if ((isOidc || isUser) && !keep) {
+            s.removeItem(k);
+          }
+        }
+      } catch {}
+    };
+    clean(window.localStorage);
+    clean(window.sessionStorage);
+  } catch {}
+}
+
+const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
+
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [state, setState] = useState<AuthState>({ 
     isAuthenticated: false, 
@@ -128,13 +159,19 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
     const onLoaded = (u: User) => syncFromUser(u);
     const onUnloaded = () => syncFromUser(null);
+    const onExpiring = () => { void refreshWithRefreshToken(); };
+    const onExpired = () => { void refreshWithRefreshToken(); };
 
     userManager.events.addUserLoaded(onLoaded);
     userManager.events.addUserUnloaded(onUnloaded);
+    userManager.events.addAccessTokenExpiring(onExpiring);
+    userManager.events.addAccessTokenExpired(onExpired);
 
     return () => {
       userManager.events.removeUserLoaded(onLoaded);
       userManager.events.removeUserUnloaded(onUnloaded);
+      userManager.events.removeAccessTokenExpiring(onExpiring);
+      userManager.events.removeAccessTokenExpired(onExpired);
     };
   }, [syncFromUser, setLoading]);
 
@@ -149,6 +186,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       if (missing.length) {
         throw new Error(`OIDC is not configured. Missing: ${missing.join(', ')}`);
       }
+      
       await userManager.signinRedirect();
     } catch (error: any) {
       setError(error?.message || "Ошибка входа через OIDC");
@@ -181,11 +219,77 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       clearError();
       const u = await userManager.signinRedirectCallback();
       syncFromUser(u);
+      purgeOidcStorage({ keepCurrentUser: true });
     } catch (error: any) {
+      const raw = (error?.message || "").toString();
+      const msg = raw.toLowerCase();
+      const isTransient = msg.includes('network') || msg.includes('failed to fetch') || msg.includes('timeout') || msg.includes('aborted');
+      if (isTransient) {
+        try {
+          await delay(350);
+          const u2 = await userManager.signinRedirectCallback();
+          syncFromUser(u2);
+          purgeOidcStorage({ keepCurrentUser: true });
+          return;
+        } catch { }
+      }
+      const looksRedeemed = msg.includes("already been redeemed") || msg.includes("id2010") || msg.includes("invalid_grant");
+      const looksTruncated = msg.includes("content-length header") || msg.includes("exceeds response body");
+      if (looksRedeemed || looksTruncated) {
+        try {
+          const existing = await userManager.getUser();
+          if (existing?.access_token) {
+            syncFromUser(existing);
+            purgeOidcStorage({ keepCurrentUser: true });
+            return;
+          }
+        } catch {}
+      }
       setError(error?.message || "Ошибка завершения входа");
       throw error;
     }
   }, [syncFromUser, setLoading, clearError, setError]);
+
+  // --- refresh using refresh_token (no iframe)
+  const refreshWithRefreshToken = useCallback(async () => {
+    try {
+      const current = await userManager.getUser();
+      if (!current?.refresh_token) return;
+
+      const form = new URLSearchParams();
+      form.set("grant_type", "refresh_token");
+      form.set("client_id", ENV.AUTH_CLIENT_ID);
+      form.set("refresh_token", current.refresh_token);
+
+      const resp = await fetch(`${ENV.AUTH_AUTHORITY}/connect/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+        credentials: "omit",
+      });
+      if (!resp.ok) throw new Error(`refresh failed: ${resp.status}`);
+      const tok = await resp.json();
+
+      const nowSec = Math.floor(Date.now() / 1000);
+      const expires_at = (tok.expires_at as number) ?? (tok.expires_in ? nowSec + Number(tok.expires_in) : nowSec + 600);
+
+      const updated = new OidcUser({
+        ...current,
+        access_token: tok.access_token ?? current.access_token,
+        id_token: tok.id_token ?? current.id_token,
+        refresh_token: tok.refresh_token ?? current.refresh_token,
+        token_type: tok.token_type ?? "Bearer",
+        scope: tok.scope ?? current.scope,
+        expires_at,
+      } as any);
+
+      await userManager.storeUser(updated);
+      const stored = await userManager.getUser();
+      syncFromUser(stored);
+    } catch (e) {
+      console.warn("refreshWithRefreshToken failed", e);
+    }
+  }, [userManager, syncFromUser]);
 
   const completeSignout = useCallback(async () => {
     try {
@@ -194,6 +298,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       console.error("Signout callback error:", error);
     }
     syncFromUser(null);
+    purgeOidcStorage();
   }, [syncFromUser]);
 
   const loginWithTelegram = useCallback(async (p: TelegramAuthPayload) => {
@@ -274,3 +379,6 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 };
 
 export const useAuth = () => useContext(AuthContext);
+
+
+
