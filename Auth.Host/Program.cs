@@ -14,6 +14,9 @@ using Auth.Shared.Contracts;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using OpenIddict.Validation.AspNetCore;
+using Auth.Host.Middleware;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
@@ -94,18 +97,23 @@ services.AddAuthentication(options =>
     };
 });
 
-// CORS for SPA
+// CORS for SPA (bearer tokens only; no credentials)
 services.AddCors(o => o.AddPolicy("spa", p => p
     .WithOrigins("https://admin.ava-kk.ru")
-    .AllowAnyHeader()
-    .AllowAnyMethod()
-    .AllowCredentials()
+    .WithHeaders("Authorization", "Content-Type")
+    .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
 ));
 
 // Antiforgery / HSTS handled at reverse proxy; set antiforgery header name here
 services.AddAntiforgery(o =>
 {
     o.HeaderName = "X-CSRF-TOKEN";
+});
+
+// Basic rate limiting: stricter limits for token endpoints
+services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
 var app = builder.Build();
@@ -173,6 +181,18 @@ app.UseCookiePolicy(new CookiePolicyOptions
 });
 
 // Pipeline
+// Avoid response compression for OpenID Connect endpoints to prevent
+// any proxy/client inconsistencies with Content-Length/body size during token exchange.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/connect"))
+    {
+        // Remove accepted encodings so ResponseCompression won't engage.
+        context.Request.Headers.Remove("Accept-Encoding");
+    }
+    await next();
+});
+
 app.UseResponseCompression();
 app.UseRouting();
 // CORS logging middleware (place before UseCors to capture preflight short-circuit)
@@ -214,8 +234,42 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseOutputCache();
+// Apply global rate limiter with per-path budgets (tighter for /connect/*)
+app.UseRateLimiter(new RateLimiterOptions
+{
+    GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var isConnect = context.Request.Path.StartsWithSegments("/connect");
+        var key = (isConnect ? "connect:" : "other:") + ip;
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = isConnect ? 10 : 100,
+            Window = TimeSpan.FromSeconds(10),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    }),
+    RejectionStatusCode = StatusCodes.Status429TooManyRequests
+});
+// OAuth/OIDC endpoints must not be cached: set headers before response starts
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/connect"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers["Cache-Control"] = "no-store";
+            context.Response.Headers["Pragma"] = "no-cache";
+            return Task.CompletedTask;
+        });
+    }
+    await next();
+});
 app.UseCors("spa");
 app.UseAuthentication();
+// Reject API calls if the DB session (sid) is revoked
+app.UseSessionRevocationValidation();
 app.UseAuthorization();
 
 // Log slow requests to spot intermittent stalls

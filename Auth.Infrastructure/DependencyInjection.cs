@@ -17,6 +17,7 @@ using System.Security.Cryptography;
 using System.IO;
 using OpenIddict.Abstractions;
 using Auth.Infrastructure.Services;
+using Microsoft.AspNetCore.Http;
 
 namespace Auth.Infrastructure;
 
@@ -78,6 +79,8 @@ public static class DependencyInjection
             options.LogoutPath = "/Account/Logout";
             options.Cookie.Name = "AuthCookie";
             options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
             options.ExpireTimeSpan = TimeSpan.FromDays(30);
             options.SlidingExpiration = true;
         });
@@ -182,9 +185,9 @@ public static class DependencyInjection
 
                 opt.DisableAccessTokenEncryption();
 
-                // Token lifetimes (can be tuned/configured)
-                // opt.SetAccessTokenLifetime(TimeSpan.FromMinutes(5));
-                // opt.SetRefreshTokenLifetime(TimeSpan.FromDays(30));
+                // Token lifetimes (corporate-friendly: short access token, longer refresh)
+                opt.SetAccessTokenLifetime(TimeSpan.FromMinutes(10));
+                opt.SetRefreshTokenLifetime(TimeSpan.FromDays(30));
 
                 // Optional: switch to reference access tokens (server-state + revocation)
                 // if (bool.TryParse(config["OpenIddict:UseReferenceAccessTokens"], out var useRef) && useRef)

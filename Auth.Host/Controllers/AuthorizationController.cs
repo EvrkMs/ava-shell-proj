@@ -1,4 +1,4 @@
-// Auth.Host\Controllers\AuthorizationController.cs
+п»ї// Auth.Host\Controllers\AuthorizationController.cs
 using System.Security.Claims;
 using Auth.Domain.Entities;
 using Auth.Host.ProfileService; // IOpenIddictProfileService
@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -48,11 +49,11 @@ public class AuthorizationController : ControllerBase
         var request = HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
 
-        // Если пользователь не залогинен - отправляем на страницу логина
+        // Р•СЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р·Р°Р»РѕРіРёРЅРµРЅ - РѕС‚РїСЂР°РІР»СЏРµРј РЅР° СЃС‚СЂР°РЅРёС†Сѓ Р»РѕРіРёРЅР°
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
         if (!result.Succeeded)
         {
-            // Если prompt=none, возвращаем ошибку без редиректа
+            // Р•СЃР»Рё prompt=none, РІРѕР·РІСЂР°С‰Р°РµРј РѕС€РёР±РєСѓ Р±РµР· СЂРµРґРёСЂРµРєС‚Р°
             if (request.Prompt == "none")
             {
                 return Forbid(
@@ -64,7 +65,7 @@ public class AuthorizationController : ControllerBase
                     }));
             }
 
-            // Сохраняем параметры запроса для возврата после логина
+            // РЎРѕС…СЂР°РЅСЏРµРј РїР°СЂР°РјРµС‚СЂС‹ Р·Р°РїСЂРѕСЃР° РґР»СЏ РІРѕР·РІСЂР°С‚Р° РїРѕСЃР»Рµ Р»РѕРіРёРЅР°
             var parameters = Request.HasFormContentType ? [.. Request.Form] : Request.Query.ToList();
 
             return Challenge(
@@ -75,7 +76,7 @@ public class AuthorizationController : ControllerBase
                 });
         }
 
-        // Получаем пользователя
+        // РџРѕР»СѓС‡Р°РµРј РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ
         var userId = _userManager.GetUserId(result.Principal);
         if (string.IsNullOrEmpty(userId))
             userId = result.Principal.FindFirstValue(OpenIddictConstants.Claims.Subject);
@@ -87,17 +88,17 @@ public class AuthorizationController : ControllerBase
         }
 
         if (string.IsNullOrEmpty(userId))
-            return Challenge(IdentityConstants.ApplicationScheme); // кука «плохая» — просим перелогиниться
+            return Challenge(IdentityConstants.ApplicationScheme); // РєСѓРєР° В«РїР»РѕС…Р°СЏВ» вЂ” РїСЂРѕСЃРёРј РїРµСЂРµР»РѕРіРёРЅРёС‚СЊСЃСЏ
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user is null)
-            return Challenge(IdentityConstants.ApplicationScheme); // пользователь удалён/изменён
+            return Challenge(IdentityConstants.ApplicationScheme); // РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ СѓРґР°Р»С‘РЅ/РёР·РјРµРЅС‘РЅ
 
-        // Клиентское приложение
+        // РљР»РёРµРЅС‚СЃРєРѕРµ РїСЂРёР»РѕР¶РµРЅРёРµ
         var application = await _applicationManager.FindByClientIdAsync(request.ClientId!)
             ?? throw new InvalidOperationException("Details concerning the calling client application cannot be found.");
 
-        // Постоянные авторизации (если есть)
+        // РџРѕСЃС‚РѕСЏРЅРЅС‹Рµ Р°РІС‚РѕСЂРёР·Р°С†РёРё (РµСЃР»Рё РµСЃС‚СЊ)
         var authorizations = new List<object>();
         await foreach (var authorization in _authorizationManager.FindAsync(
             subject: user.Id.ToString(),
@@ -132,7 +133,7 @@ public class AuthorizationController : ControllerBase
                     // Create/attach server-side session (sid)
                     await AttachInteractiveSessionAsync(principal, user, request.ClientId);
 
-                    // Создаём постоянную авторизацию при необходимости
+                    // РЎРѕР·РґР°С‘Рј РїРѕСЃС‚РѕСЏРЅРЅСѓСЋ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё
                     var authorization = authorizations.LastOrDefault();
                     authorization ??= await _authorizationManager.CreateAsync(
                         principal: principal,
@@ -159,7 +160,7 @@ public class AuthorizationController : ControllerBase
 
             default:
                 {
-                    // (Упрощённо) автоматически даём согласие
+                    // (РЈРїСЂРѕС‰С‘РЅРЅРѕ) Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РґР°С‘Рј СЃРѕРіР»Р°СЃРёРµ
                     var consentPrincipal = await _profile.CreateAsync(user, request);
 
                     await AttachInteractiveSessionAsync(consentPrincipal, user, request.ClientId);
@@ -187,7 +188,7 @@ public class AuthorizationController : ControllerBase
 
         if (request.IsAuthorizationCodeGrantType() || request.IsRefreshTokenGrantType())
         {
-            // Извлекаем principal из authorization code/refresh token
+            // РР·РІР»РµРєР°РµРј principal РёР· authorization code/refresh token
             var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             if (!result.Succeeded)
             {
@@ -200,7 +201,7 @@ public class AuthorizationController : ControllerBase
                     }));
             }
 
-            // Пользователь
+            // РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ
             var user = await _userManager.FindByIdAsync(result.Principal!.GetClaim(Claims.Subject));
             if (user is null || !user.IsActive)
             {
@@ -220,7 +221,11 @@ public class AuthorizationController : ControllerBase
             var sid = result.Principal!.GetClaim("sid");
             if (!string.IsNullOrEmpty(sid))
             {
-                ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim("sid", sid));
+                var ci = (ClaimsIdentity)principal.Identity!;
+                var sidClaim = new Claim("sid", sid);
+                ci.AddClaim(sidClaim);
+                // Ensure "sid" is emitted into id_token/access_token
+                sidClaim.SetDestinations(OpenIddictConstants.Destinations.IdentityToken, OpenIddictConstants.Destinations.AccessToken);
                 await _sessions.TouchAsync(sid);
                 var active = await _sessions.IsActiveAsync(sid);
                 if (!active)
@@ -233,6 +238,17 @@ public class AuthorizationController : ControllerBase
                             [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The session has been revoked."
                         }));
                 }
+
+                // Refresh sid cookie lifetime on token exchange
+                var cookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.None,
+                    IsEssential = true,
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                };
+                Response.Cookies.Append("sid", sid, cookieOptions);
             }
 
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -247,6 +263,23 @@ public class AuthorizationController : ControllerBase
     {
         var claimsPrincipal = (await HttpContext.AuthenticateAsync(
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme)).Principal;
+
+        // Enforce session-bound access: deny if the session referenced by 'sid' is revoked
+        var sid = claimsPrincipal!.GetClaim("sid");
+        if (!string.IsNullOrEmpty(sid))
+        {
+            var active = await _sessions.IsActiveAsync(sid);
+            if (!active)
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidToken,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The session has been revoked."
+                    }));
+            }
+        }
 
         var user = await _userManager.FindByIdAsync(claimsPrincipal!.GetClaim(Claims.Subject));
         if (user is null)
@@ -295,6 +328,37 @@ public class AuthorizationController : ControllerBase
     {
         var request = HttpContext.GetOpenIddictServerRequest();
 
+        // Try to revoke the DB session referenced by id_token_hint (sid)
+        try
+        {
+            var oidc = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var principal = oidc?.Principal;
+            var sid = principal?.GetClaim("sid");
+            if (string.IsNullOrEmpty(sid))
+            {
+                // Fallback: try from secure cookie set at sign-in
+                if (Request.Cookies.TryGetValue("sid", out var cookieSid) && !string.IsNullOrWhiteSpace(cookieSid))
+                {
+                    sid = cookieSid;
+                }
+            }
+            if (!string.IsNullOrEmpty(sid))
+            {
+                var by = principal?.GetClaim(Claims.Subject) ?? User?.FindFirstValue(Claims.Subject) ?? User?.Identity?.Name;
+                await _sessions.RevokeAsync(sid!, reason: "logout", by: by);
+            }
+        }
+        catch
+        {
+            // Best-effort: don't block logout if revocation fails
+        }
+
+        // Clean up sid cookie regardless
+        if (Request.Cookies.ContainsKey("sid"))
+        {
+            Response.Cookies.Delete("sid", new CookieOptions { Secure = true, SameSite = SameSiteMode.Lax });
+        }
+
         await _signInManager.SignOutAsync();
 
         if (!string.IsNullOrEmpty(request?.PostLogoutRedirectUri))
@@ -315,9 +379,25 @@ public class AuthorizationController : ControllerBase
         var ua = Request.Headers["User-Agent"].ToString();
         var device = "web";
         var sid = await _sessions.EnsureInteractiveSessionAsync(user.Id, clientId, ip, ua, device, TimeSpan.FromDays(30));
-        ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim("sid", sid));
+        var ci = (ClaimsIdentity)principal.Identity!;
+        var sidClaim = new Claim("sid", sid);
+        ci.AddClaim(sidClaim);
+        // Ensure "sid" is emitted into id_token/access_token
+        sidClaim.SetDestinations(OpenIddictConstants.Destinations.IdentityToken, OpenIddictConstants.Destinations.AccessToken);
+
+        // Also persist sid in a secure, http-only cookie as a fallback for logout
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            IsEssential = true,
+            Expires = DateTimeOffset.UtcNow.AddDays(30)
+        };
+        Response.Cookies.Append("sid", sid, cookieOptions);
     }
 }
+
 
 
 
