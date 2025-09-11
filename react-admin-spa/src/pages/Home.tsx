@@ -1,24 +1,25 @@
 ﻿import React from "react";
 import { useAuth } from "../auth/AuthContext";
 import { Box, Paper, Typography, Stack, CircularProgress, Alert } from "@mui/material";
-
-import { hasRootRole } from "../utils/jwt";
+import { rolesFromClaims, decodeJwtClaims } from "../utils/jwt";
 
 const Users = React.lazy(() => import("./HomeComponents/Users"));
 
 const Home: React.FC = () => {
   const { state } = useAuth();
-
-    const isRoot = React.useMemo(() => hasRootRole(state.accessToken), [state.accessToken]);
+  const isRoot = React.useMemo(() => {
+    const claims = (state.profile as any) ?? decodeJwtClaims(state.idToken);
+    const roles = rolesFromClaims(claims);
+    return roles.map(r => r.toLowerCase()).includes("root");
+  }, [state.profile, state.idToken]);
 
   return (
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Панель администратора
-          </Typography>
-        </Box>\r\n      </Stack>
+          <Typography variant="h4" gutterBottom>Главная</Typography>
+        </Box>
+      </Stack>
 
       <Paper sx={{ width: "100%", p: 2 }} variant="outlined">
         {isRoot ? (
@@ -26,7 +27,7 @@ const Home: React.FC = () => {
             <Users />
           </React.Suspense>
         ) : (
-          <Alert severity="info">У вас нет доступа к разделу пользователей.</Alert>
+          <Alert severity="info">У вас нет прав для просмотра раздела.</Alert>
         )}
       </Paper>
     </Box>
@@ -34,13 +35,3 @@ const Home: React.FC = () => {
 };
 
 export default Home;
-
-
-
-
-
-
-
-
-
-
