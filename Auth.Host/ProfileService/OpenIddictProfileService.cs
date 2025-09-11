@@ -1,4 +1,4 @@
-// Auth.Host/ProfileService/OpenIddictProfileService.cs
+п»ї// Auth.Host/ProfileService/OpenIddictProfileService.cs
 using System.Security.Claims;
 using Auth.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -37,7 +37,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
         var identity = (ClaimsIdentity)principal.Identity!;
 
         
-        // Гарантируем sub/name
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ sub/name
         identity.AddOrReplaceClaim(Claims.Subject, user.Id.ToString());
         if (!identity.HasClaim(c => c.Type == Claims.Name))
             identity.AddClaim(new Claim(Claims.Name, user.UserName ?? user.Id.ToString()));
@@ -46,7 +46,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
         foreach (var roleName in roles)
         {
             identity.TryAddRole(roleName);
-            // (опционально) claims самой роли:
+            // (пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ) claims пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ:
             var role = await _roleManager.FindByNameAsync(roleName);
             if (role != null)
             {
@@ -55,6 +55,9 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
                     if (!identity.HasClaim(rc.Type, rc.Value))
                         identity.AddClaim(rc);
             }
+            // Also add aggregate "roles" claim per role for SPA compatibility
+            if (!identity.HasClaim("roles", roleName))
+                identity.AddClaim(new Claim("roles", roleName));
         }
         // Scopes/resources
         principal.SetScopes(request.GetScopes());
@@ -64,7 +67,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
             resources.Add(r);
         principal.SetResources(resources);
 
-        // Destinations — куда какие клеймы
+        // Destinations пїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         ApplyDestinations(principal);
         return principal;
     }
@@ -80,9 +83,7 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
                 case Claims.Subject:
                     dest.Add(Destinations.IdentityToken);
                     break;
-                case "sid": // "sid" per OIDC Back-Channel Logout
-                    dest.Add(Destinations.IdentityToken);
-                    break;
+                case "sid": // "sid" per OIDC Back-Channel Logout\n                    dest.Add(Destinations.IdentityToken);\n                    dest.Add(Destinations.AccessToken);\n                    break;
 
                 case Claims.Name:
                 case Claims.PreferredUsername:
@@ -103,12 +104,12 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
 
                 case Claims.Role:          // "role"
                 case ClaimTypes.Role:      // http://schemas.microsoft.com/ws/2008/06/identity/claims/role
-                    if (principal.HasScope(Scopes.Roles))
-                        dest.Add(Destinations.IdentityToken);
+                    // Always include roles in the id_token so SPAs can determine privileges
+                    dest.Add(Destinations.IdentityToken);
                     break;
 
                 case "AspNet.Identity.SecurityStamp":
-                    dest.Clear(); // никогда не отдаём
+                    dest.Clear(); // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
                     break;
             }
 
@@ -131,7 +132,7 @@ internal static class ClaimsIdentityRoleExtensions
 {
     public static void TryAddRole(this ClaimsIdentity identity, string roleValue)
     {
-        // уже есть "role" или ClaimTypes.Role с тем же значением?
+        // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅ "role" пїЅпїЅпїЅ ClaimTypes.Role пїЅ пїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ?
         bool hasJwtRole = identity.HasClaim(c => c.Type == OpenIddictConstants.Claims.Role && c.Value == roleValue);
         bool hasWsRole = identity.HasClaim(c => c.Type == ClaimTypes.Role && c.Value == roleValue);
 
@@ -142,5 +143,6 @@ internal static class ClaimsIdentityRoleExtensions
             identity.AddClaim(new Claim(ClaimTypes.Role, roleValue));
     }
 }
+
 
 
