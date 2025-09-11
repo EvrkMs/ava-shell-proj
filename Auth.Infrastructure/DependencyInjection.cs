@@ -189,9 +189,8 @@ public static class DependencyInjection
                 opt.SetAccessTokenLifetime(TimeSpan.FromMinutes(10));
                 opt.SetRefreshTokenLifetime(TimeSpan.FromDays(30));
 
-                // Optional: switch to reference access tokens (server-state + revocation)
-                // if (bool.TryParse(config["OpenIddict:UseReferenceAccessTokens"], out var useRef) && useRef)
-                //     opt.UseReferenceAccessTokens();
+                // Use reference access tokens (server-state + supports revocation)
+                opt.UseReferenceAccessTokens();
             })
             .AddValidation(opt =>
             {

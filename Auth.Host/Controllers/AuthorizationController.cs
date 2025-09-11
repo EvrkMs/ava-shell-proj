@@ -49,6 +49,17 @@ public class AuthorizationController : ControllerBase
         var request = HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
 
+        // If the browser has a 'sid' cookie that was revoked, prevent silent re-login by clearing cookies
+        if (Request.Cookies.TryGetValue("sid", out var cookieSid) && !string.IsNullOrWhiteSpace(cookieSid))
+        {
+            var stillActive = await _sessions.IsActiveAsync(cookieSid);
+            if (!stillActive)
+            {
+                Response.Cookies.Delete("sid", new CookieOptions { Secure = true, SameSite = SameSiteMode.Lax });
+                await _signInManager.SignOutAsync();
+            }
+        }
+
         // Если пользователь не залогинен - отправляем на страницу логина
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
         if (!result.Succeeded)
@@ -172,7 +183,12 @@ public class AuthorizationController : ControllerBase
                         type: AuthorizationTypes.Permanent,
                         scopes: consentPrincipal.GetScopes());
 
-                    consentPrincipal.SetAuthorizationId(await _authorizationManager.GetIdAsync(auth));
+                    var authId = await _authorizationManager.GetIdAsync(auth);
+                    consentPrincipal.SetAuthorizationId(authId);
+                    // Link the current sid to the authorization for precise revocation later
+                    var sidVal = consentPrincipal.GetClaim("sid");
+                    if (!string.IsNullOrEmpty(sidVal))
+                        await _sessions.LinkAuthorizationAsync(sidVal, authId);
 
                     return SignIn(consentPrincipal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
                 }
@@ -219,13 +235,36 @@ public class AuthorizationController : ControllerBase
 
             // Carry over session id from the original grant (if any)
             var sid = result.Principal!.GetClaim("sid");
-            if (!string.IsNullOrEmpty(sid))
+            // Also carry over authorization id from the original grant (bind tokens to same auth)
+            var originalAuthId = result.Principal!.GetAuthorizationId();
+            if (!string.IsNullOrEmpty(originalAuthId))
+                principal.SetAuthorizationId(originalAuthId);
+            if (string.IsNullOrEmpty(sid))
+            {
+                // For refresh_token grant: session-bound is mandatory (block legacy RTs without sid)
+                if (request.IsRefreshTokenGrantType())
+                {
+                    return Forbid(
+                        authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                        properties: new AuthenticationProperties(new Dictionary<string, string?>
+                        {
+                            [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                            [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The session context is missing."
+                        }));
+                }
+
+                // For authorization_code grant: establish a new interactive session and stamp sid
+                await AttachInteractiveSessionAsync(principal, user, request.ClientId);
+            }
+            else
             {
                 var ci = (ClaimsIdentity)principal.Identity!;
                 var sidClaim = new Claim("sid", sid);
                 ci.AddClaim(sidClaim);
                 // Ensure "sid" is emitted into id_token/access_token
-                sidClaim.SetDestinations(OpenIddictConstants.Destinations.IdentityToken, OpenIddictConstants.Destinations.AccessToken);
+                sidClaim.SetDestinations(
+                    OpenIddictConstants.Destinations.IdentityToken,
+                    OpenIddictConstants.Destinations.AccessToken);
                 await _sessions.TouchAsync(sid);
                 var active = await _sessions.IsActiveAsync(sid);
                 if (!active)
@@ -318,6 +357,15 @@ public class AuthorizationController : ControllerBase
             claims[Claims.PhoneNumberVerified] = user.PhoneNumberConfirmed;
         }
 
+        // Also include roles so SPA can render privileges from userinfo
+        var roles = await _userManager.GetRolesAsync(user);
+        if (roles is not null && roles.Count > 0)
+        {
+            claims[Claims.Role] = roles.ToArray();
+            claims[ClaimTypes.Role] = roles.ToArray();
+            claims["roles"] = roles.ToArray();
+        }
+
         return Ok(claims);
     }
 
@@ -383,7 +431,9 @@ public class AuthorizationController : ControllerBase
         var sidClaim = new Claim("sid", sid);
         ci.AddClaim(sidClaim);
         // Ensure "sid" is emitted into id_token/access_token
-        sidClaim.SetDestinations(OpenIddictConstants.Destinations.IdentityToken, OpenIddictConstants.Destinations.AccessToken);
+        sidClaim.SetDestinations(
+            OpenIddictConstants.Destinations.IdentityToken,
+            OpenIddictConstants.Destinations.AccessToken);
 
         // Also persist sid in a secure, http-only cookie as a fallback for logout
         var cookieOptions = new CookieOptions

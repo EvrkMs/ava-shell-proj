@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Auth.Application.Interfaces;
+using OpenIddict.Abstractions;
 
 namespace Auth.Host.Middleware;
 
@@ -19,6 +20,18 @@ public class SessionRevocationMiddleware
             context.User?.Identity?.IsAuthenticated == true)
         {
             var sid = context.User.FindFirst("sid")?.Value;
+            // For any user token (has subject), sid is required and must be active.
+            var subject = context.User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value
+                          ?? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                          ?? context.User.FindFirst("sub")?.Value;
+            var isUserToken = !string.IsNullOrEmpty(subject);
+            if (isUserToken && string.IsNullOrEmpty(sid))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync("{\"error\":\"session_required\"}");
+                return;
+            }
             if (!string.IsNullOrEmpty(sid))
             {
                 var active = await sessions.IsActiveAsync(sid);
@@ -41,4 +54,3 @@ public static class SessionRevocationMiddlewareExtensions
     public static IApplicationBuilder UseSessionRevocationValidation(this IApplicationBuilder app)
         => app.UseMiddleware<SessionRevocationMiddleware>();
 }
-

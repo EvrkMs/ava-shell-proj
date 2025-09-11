@@ -27,5 +27,7 @@ public class UserSession
     public DateTime? RevokedAt { get; set; }
     public string? RevokedBy { get; set; }
     public string? RevocationReason { get; set; }
-}
 
+    // Link to OpenIddict authorization (for precise token revocation)
+    public string? AuthorizationId { get; set; }
+}

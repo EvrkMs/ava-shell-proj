@@ -19,10 +19,11 @@ internal class UserSessionConfiguration : IEntityTypeConfiguration<UserSession>
         builder.Property(s => s.IpAddress).HasMaxLength(100);
         builder.Property(s => s.RevokedBy).HasMaxLength(200);
         builder.Property(s => s.RevocationReason).HasMaxLength(500);
+        builder.Property(s => s.AuthorizationId).HasMaxLength(200);
 
         builder.HasIndex(s => new { s.UserId, s.Revoked });
+        builder.HasIndex(s => s.AuthorizationId);
         builder.HasIndex(s => s.ClientId);
         builder.HasIndex(s => s.CreatedAt);
     }
 }
-

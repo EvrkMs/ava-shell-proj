@@ -13,10 +13,12 @@ namespace Auth.Host.Controllers;
 public class SessionsController : ControllerBase
 {
     private readonly ISessionRepository _repo;
+    private readonly ISessionService _sessions;
 
-    public SessionsController(ISessionRepository repo)
+    public SessionsController(ISessionRepository repo, ISessionService sessions)
     {
         _repo = repo;
+        _sessions = sessions;
     }
 
     private bool TryGetUserId(out Guid userId)
@@ -52,15 +54,12 @@ public class SessionsController : ControllerBase
     public async Task<IActionResult> RevokeAll(CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
-        var now = DateTime.UtcNow;
         var count = 0;
         await foreach (var s in _repo.ListByUserAsync(userId, onlyActive: true, ct: ct))
         {
-            s.Revoked = true;
-            s.RevokedAt = now;
-            s.RevokedBy = userId.ToString();
-            await _repo.UpdateAsync(s, ct);
-            count++;
+            var sid = s.Id.ToString("N");
+            if (await _sessions.RevokeAsync(sid, reason: "user_revoked_all", by: userId.ToString(), ct))
+                count++;
         }
         return Ok(new { revoked = count });
     }
@@ -72,12 +71,8 @@ public class SessionsController : ControllerBase
         var s = await _repo.GetAsync(id, ct);
         if (s is null) return NotFound();
         if (s.UserId != userId) return Forbid();
-        if (s.Revoked) return NoContent();
-        s.Revoked = true;
-        s.RevokedAt = DateTime.UtcNow;
-        s.RevokedBy = userId.ToString();
-        await _repo.UpdateAsync(s, ct);
+        if (!await _sessions.RevokeAsync(id.ToString("N"), reason: "user_revoked", by: userId.ToString(), ct))
+            return NoContent();
         return NoContent();
     }
 }
-
