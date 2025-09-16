@@ -1,0 +1,6 @@
+[submodule "UI"]
+	path = UI
+	url = git@github.com:EvrkMs/ava-shell-proj.git
+[submodule "AdminAuthService"]
+	path = AdminAuthService
+	url = git@github.com:EvrkMs/ava-shell-proj.git
