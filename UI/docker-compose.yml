@@ -1,0 +1,18 @@
+services:
+  admin-ui:
+    container_name: admin-ui
+    build:
+      context: ./react-admin-spa
+      dockerfile: Dockerfile
+    image: admin-ui:latest
+    expose:
+      - "5000"  # host:container
+    networks:
+      - nginx_network
+    restart: unless-stopped
+
+networks:
+  nginx_network:
+    external: true
+    name: nginx_network
+
