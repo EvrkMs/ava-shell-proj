@@ -1,0 +1,37 @@
+﻿using Auth.Application.Interfaces;
+using Auth.Domain.Entities;
+using Auth.EntityFramework.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace Auth.EntityFramework.Repositories;
+
+public class TelegramRepository : ITelegramRepository
+{
+    private readonly AppDbContext _db;
+
+    public TelegramRepository(AppDbContext db) => _db = db;
+
+    public Task<bool> ExistsByTelegramIdAsync(long telegramId, CancellationToken ct = default) =>
+        _db.TelegramEntities.AsNoTracking().AnyAsync(t => t.TelegramId == telegramId, ct);
+
+    public Task<TelegramEntity?> GetByUserIdAsync(Guid userId, CancellationToken ct = default) =>
+        _db.TelegramEntities.AsNoTracking().SingleOrDefaultAsync(t => t.UserId == userId, ct);
+
+    public Task<TelegramEntity?> GetByTelegramIdAsync(long telegramId, CancellationToken ct = default) =>
+        _db.TelegramEntities.AsNoTracking().SingleOrDefaultAsync(t => t.TelegramId == telegramId, cancellationToken: ct);
+
+    public async Task AddAsync(TelegramEntity entity, CancellationToken ct = default)
+    {
+        await _db.TelegramEntities.AddAsync(entity, ct);
+    }
+
+    public async Task RemoveAsync(TelegramEntity entity, CancellationToken ct = default)
+    {
+        _db.TelegramEntities.Remove(entity);
+    }
+
+    public async Task UpdateAsync(TelegramEntity entity, CancellationToken ct = default)
+    {
+        _db.TelegramEntities.Update(entity);
+    }
+}

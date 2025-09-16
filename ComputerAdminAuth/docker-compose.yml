@@ -1,0 +1,44 @@
+services:
+  auth:
+    build:
+      context: .
+      dockerfile: Auth.Host/Dockerfile
+    image: auth-host:latest
+    container_name: auth-host
+    hostname: auth-host
+    restart: always
+    user: "0:0"
+    environment:
+      - ForwardedHeaders__KnownNetworks=${ForwardedHeaders__KnownNetworks}
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=auth_db;Username=AdminAVA;Password=${POSTGRES_PASSWORD}
+      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
+      - Telegram__AllowedClockSkewSeconds=60
+      - OIDC_SVC_REPORTING_SECRET=${OIDC_SVC_REPORTING_SECRET}
+      - OIDC_SVC_INTROSPECTOR_SECRET=${OIDC_SVC_INTROSPECTOR_SECRET}
+      - OIDC_RESOURCE_SECRET=${OIDC_RESOURCE_SECRET}
+      - AUTH_ROOT_PASSWORD=${AUTH_ROOT_PASSWORD}
+      - OIDC_SIGNING_CERTIFICATE_PATH=/keys/openiddict/signing.pfx
+      - OIDC_SIGNING_CERTIFICATE_PASSWORD=${OIDC_SIGNING_CERTIFICATE_PASSWORD}
+      - DataProtection__KeysDirectory=/keys/dataprotection
+    expose:
+      - "5001"
+    volumes:
+      - auth_dataprotection:/keys/dataprotection
+      - openiddict_keys:/keys/openiddict
+    networks:
+      - app-network
+      - nginx_network
+
+networks:
+  app-network:
+    external: true
+    name: app-network
+
+  nginx_network:
+    external: true
+    name: nginx_network
+
+volumes:
+  auth_dataprotection:
+  openiddict_keys:
