@@ -31,6 +31,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "ApiRead")]
     public async Task<ActionResult<IEnumerable<UserSession>>> List([FromQuery] bool all = false, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -41,6 +42,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpGet("current")]
+    [Authorize(Policy = "ApiRead")]
     public async Task<ActionResult<UserSession>> Current(CancellationToken ct = default)
     {
         var sid = User.FindFirstValue("sid");
@@ -51,13 +53,18 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("revoke-all")]
+    [Authorize(Policy = "ApiWrite")]
     public async Task<IActionResult> RevokeAll(CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
+        // Do not revoke the session from which this action is performed
+        var currentSid = User.FindFirstValue("sid");
         var count = 0;
         await foreach (var s in _repo.ListByUserAsync(userId, onlyActive: true, ct: ct))
         {
             var sid = s.Id.ToString("N");
+            if (!string.IsNullOrWhiteSpace(currentSid) && string.Equals(sid, currentSid, StringComparison.OrdinalIgnoreCase))
+                continue;
             if (await _sessions.RevokeAsync(sid, reason: "user_revoked_all", by: userId.ToString(), ct))
                 count++;
         }
@@ -65,6 +72,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/revoke")]
+    [Authorize(Policy = "ApiWrite")]
     public async Task<IActionResult> RevokeOne(Guid id, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();

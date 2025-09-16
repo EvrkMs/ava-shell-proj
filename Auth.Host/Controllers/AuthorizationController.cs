@@ -1,4 +1,5 @@
 ﻿// Auth.Host\Controllers\AuthorizationController.cs
+using Auth.Host.Services;
 using System.Security.Claims;
 using Auth.Domain.Entities;
 using Auth.Host.ProfileService; // IOpenIddictProfileService
@@ -24,6 +25,7 @@ public class AuthorizationController : ControllerBase
     private readonly UserManager<UserEntity> _userManager;
     private readonly IOpenIddictProfileService _profile;
     private readonly ISessionService _sessions;
+    private readonly SessionBindingService _sessionBinder;
 
     public AuthorizationController(
         IOpenIddictApplicationManager applicationManager,
@@ -31,7 +33,8 @@ public class AuthorizationController : ControllerBase
         SignInManager<UserEntity> signInManager,
         UserManager<UserEntity> userManager,
         IOpenIddictProfileService profile,
-        ISessionService sessions)
+        ISessionService sessions,
+        SessionBindingService sessionBinder)
     {
         _applicationManager = applicationManager;
         _authorizationManager = authorizationManager;
@@ -39,6 +42,7 @@ public class AuthorizationController : ControllerBase
         _userManager = userManager;
         _profile = profile;
         _sessions = sessions;
+        _sessionBinder = sessionBinder;
     }
 
     [HttpGet("~/connect/authorize")]
@@ -88,6 +92,10 @@ public class AuthorizationController : ControllerBase
         }
 
         // Получаем пользователя
+        // Silent-login guard via service
+        var guard = await _sessionBinder.EnforceCookieSessionOrChallengeAsync(HttpContext, request);
+        if (!guard.Ok) return guard.Action!;
+
         var userId = _userManager.GetUserId(result.Principal);
         if (string.IsNullOrEmpty(userId))
             userId = result.Principal.FindFirstValue(OpenIddictConstants.Claims.Subject);
@@ -142,7 +150,7 @@ public class AuthorizationController : ControllerBase
                     var principal = await _profile.CreateAsync(user, request);
 
                     // Create/attach server-side session (sid)
-                    await AttachInteractiveSessionAsync(principal, user, request.ClientId);
+                    await _sessionBinder.AttachInteractiveSessionAsync(HttpContext, principal, user, request.ClientId);
 
                     // Создаём постоянную авторизацию при необходимости
                     var authorization = authorizations.LastOrDefault();
@@ -153,7 +161,20 @@ public class AuthorizationController : ControllerBase
                         type: AuthorizationTypes.Permanent,
                         scopes: principal.GetScopes());
 
-                    principal.SetAuthorizationId(await _authorizationManager.GetIdAsync(authorization));
+                    var authId = await _authorizationManager.GetIdAsync(authorization);
+                    // Ensure isolation: create a distinct authorization per interactive session
+                    var isolatedAuthorization = await _authorizationManager.CreateAsync(
+                        principal: principal,
+                        subject: user.Id.ToString(),
+                        client: await _applicationManager.GetIdAsync(application),
+                        type: AuthorizationTypes.Permanent,
+                        scopes: principal.GetScopes());
+                    authId = await _authorizationManager.GetIdAsync(isolatedAuthorization);
+                    principal.SetAuthorizationId(authId);
+                    // Link authorization to current DB session for cascade token revocation
+                    var sidVal = principal.GetClaim("sid");
+                    if (!string.IsNullOrEmpty(sidVal))
+                        await _sessions.LinkAuthorizationAsync(sidVal, authId);
 
                     return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
                 }
@@ -174,7 +195,7 @@ public class AuthorizationController : ControllerBase
                     // (Упрощённо) автоматически даём согласие
                     var consentPrincipal = await _profile.CreateAsync(user, request);
 
-                    await AttachInteractiveSessionAsync(consentPrincipal, user, request.ClientId);
+                    await _sessionBinder.AttachInteractiveSessionAsync(HttpContext, consentPrincipal, user, request.ClientId);
 
                     var auth = await _authorizationManager.CreateAsync(
                         principal: consentPrincipal,
@@ -238,7 +259,12 @@ public class AuthorizationController : ControllerBase
             // Also carry over authorization id from the original grant (bind tokens to same auth)
             var originalAuthId = result.Principal!.GetAuthorizationId();
             if (!string.IsNullOrEmpty(originalAuthId))
+            {
                 principal.SetAuthorizationId(originalAuthId);
+                // Ensure session<->authorization link exists for reliable revocation
+                if (!string.IsNullOrEmpty(sid))
+                    await _sessions.LinkAuthorizationAsync(sid, originalAuthId);
+            }
             if (string.IsNullOrEmpty(sid))
             {
                 // For refresh_token grant: session-bound is mandatory (block legacy RTs without sid)
@@ -254,7 +280,7 @@ public class AuthorizationController : ControllerBase
                 }
 
                 // For authorization_code grant: establish a new interactive session and stamp sid
-                await AttachInteractiveSessionAsync(principal, user, request.ClientId);
+                await _sessionBinder.AttachInteractiveSessionAsync(HttpContext, principal, user, request.ClientId);
             }
             else
             {
@@ -283,7 +309,7 @@ public class AuthorizationController : ControllerBase
                 {
                     HttpOnly = true,
                     Secure = true,
-                    SameSite = SameSiteMode.None,
+                    SameSite = SameSiteMode.Lax,
                     IsEssential = true,
                     Expires = DateTimeOffset.UtcNow.AddDays(30)
                 };
@@ -421,38 +447,7 @@ public class AuthorizationController : ControllerBase
             properties: new AuthenticationProperties { RedirectUri = "/" });
     }
 
-    private async Task AttachInteractiveSessionAsync(ClaimsPrincipal principal, UserEntity user, string? clientId)
-    {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var ua = Request.Headers["User-Agent"].ToString();
-        var device = "web";
-        var sid = await _sessions.EnsureInteractiveSessionAsync(user.Id, clientId, ip, ua, device, TimeSpan.FromDays(30));
-        var ci = (ClaimsIdentity)principal.Identity!;
-        var sidClaim = new Claim("sid", sid);
-        ci.AddClaim(sidClaim);
-        // Ensure "sid" is emitted into id_token/access_token
-        sidClaim.SetDestinations(
-            OpenIddictConstants.Destinations.IdentityToken,
-            OpenIddictConstants.Destinations.AccessToken);
-
-        // Also persist sid in a secure, http-only cookie as a fallback for logout
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            IsEssential = true,
-            Expires = DateTimeOffset.UtcNow.AddDays(30)
-        };
-        Response.Cookies.Append("sid", sid, cookieOptions);
     }
-}
-
-
-
-
-
-
 
 
 

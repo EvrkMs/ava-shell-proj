@@ -77,6 +77,7 @@ services.AddOutputCache(o =>
 });
 
 services.AddScoped<IOpenIddictProfileService, OpenIddictProfileService>();
+services.AddScoped<Auth.Host.Services.SessionBindingService>();
 
 // Smart authentication scheme: OpenIddict validation for API, Cookies otherwise
 services.AddAuthentication(options =>
@@ -124,9 +125,13 @@ var app = builder.Build();
 var fwd = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-    RequireHeaderSymmetry = false,
-    ForwardLimit = null
+    RequireHeaderSymmetry = true
 };
+// Limit how many forwarders are trusted unless explicitly configured
+if (int.TryParse(cfg["ForwardedHeaders:ForwardLimit"], out var forwardLimit) && forwardLimit >= 1)
+{
+    fwd.ForwardLimit = forwardLimit;
+}
 fwd.KnownNetworks.Clear();
 fwd.KnownProxies.Clear();
 // Configure trusted proxies/networks and allowed hosts from configuration/env
@@ -164,14 +169,6 @@ if (!string.IsNullOrWhiteSpace(allowedHostsCsv))
         fwd.AllowedHosts.Add(h);
 }
 
-// Allow forwarded headers from any source (trust all proxies/networks).
-// This disables the default restriction requiring a known proxy and silences Unknown proxy warnings.
-try
-{
-    fwd.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("0.0.0.0"), 0));
-    fwd.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(System.Net.IPAddress.Parse("::"), 0));
-}
-catch { }
 app.UseForwardedHeaders(fwd);
 
 app.UseCookiePolicy(new CookiePolicyOptions

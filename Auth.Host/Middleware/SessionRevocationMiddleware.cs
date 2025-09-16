@@ -15,9 +15,10 @@ public class SessionRevocationMiddleware
 
     public async Task InvokeAsync(HttpContext context, ISessionService sessions)
     {
-        // Only enforce for API routes where bearer tokens are expected
-        if (context.Request.Path.StartsWithSegments("/api") &&
-            context.User?.Identity?.IsAuthenticated == true)
+        // Enforce for API routes or any request carrying Authorization header
+        var hasAuthHeader = context.Request.Headers.ContainsKey("Authorization");
+        var isApi = context.Request.Path.StartsWithSegments("/api");
+        if ((isApi || hasAuthHeader) && context.User?.Identity?.IsAuthenticated == true)
         {
             var sid = context.User.FindFirst("sid")?.Value;
             // For any user token (has subject), sid is required and must be active.

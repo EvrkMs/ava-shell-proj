@@ -34,8 +34,8 @@ public class TelegramController : ControllerBase
             ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
 
-        _logger.LogInformation("Looking for subject claim. Found: {sub}", sub);
-        _logger.LogInformation("All claims: {claims}",
+        _logger.LogDebug("Looking for subject claim. Found: {sub}", sub);
+        _logger.LogDebug("All claims: {claims}",
             string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
 
         if (string.IsNullOrWhiteSpace(sub))
@@ -61,6 +61,7 @@ public class TelegramController : ControllerBase
     }
 
     [HttpPost("unbind")]
+    [Authorize(Policy = "ApiWrite")]
     public async Task<IActionResult> Unbind(CancellationToken ct)
     {
         var sub = User.FindFirstValue("sub");
