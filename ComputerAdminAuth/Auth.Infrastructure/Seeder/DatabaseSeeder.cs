@@ -10,16 +10,12 @@ public static class DatabaseSeeder
 {
     public static async Task ApplyMigrationsAndSeedAsync(this IServiceProvider sp)
     {
-        // Миграции для всех контекстов
-        using var scope = sp.CreateScope();
-        var provider = scope.ServiceProvider;
-
-        await provider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+        await sp.GetRequiredService<AppDbContext>().Database.MigrateAsync();
 
         // Сидеры
-        await SeedRolesAsync(provider);
-        await SeedDefaultUserAsync(provider);
-        await OpenIddictSeeder.SeedAsync(provider);
+        await SeedRolesAsync(sp);
+        await SeedDefaultUserAsync(sp);
+        await OpenIddictSeeder.SeedAsync(sp);
     }
 
     private static async Task SeedRolesAsync(IServiceProvider sp)

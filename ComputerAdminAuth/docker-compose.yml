@@ -11,7 +11,7 @@ services:
     environment:
       - ForwardedHeaders__KnownNetworks=${ForwardedHeaders__KnownNetworks}
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=auth_db;Username=AdminAVA;Password=${POSTGRES_PASSWORD}
+      - ConnectionStrings__DefaultConnection=${DefaultConnection}
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
       - Telegram__AllowedClockSkewSeconds=60
       - OIDC_SVC_REPORTING_SECRET=${OIDC_SVC_REPORTING_SECRET}
