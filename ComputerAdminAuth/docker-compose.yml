@@ -27,13 +27,13 @@ services:
       - auth_dataprotection:/keys/dataprotection
       - openiddict_keys:/keys/openiddict
     networks:
-      - app-network
+      - data-network
       - nginx_network
 
 networks:
-  app-network:
+  data-network:
     external: true
-    name: app-network
+    name: data-network
 
   nginx_network:
     external: true
