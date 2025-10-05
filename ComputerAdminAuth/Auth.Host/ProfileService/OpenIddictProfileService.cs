@@ -12,24 +12,16 @@ public interface IOpenIddictProfileService
     Task<ClaimsPrincipal> CreateAsync(UserEntity user, OpenIddictRequest request, CancellationToken ct = default);
 }
 
-public sealed class OpenIddictProfileService : IOpenIddictProfileService
+public sealed class OpenIddictProfileService(
+    SignInManager<UserEntity> signInManager,
+    IOpenIddictScopeManager scopeManager,
+    UserManager<UserEntity> userManager,
+    RoleManager<IdentityRole<Guid>> roleManager) : IOpenIddictProfileService
 {
-    private readonly SignInManager<UserEntity> _signInManager;
-    private readonly IOpenIddictScopeManager _scopeManager;
-    private readonly UserManager<UserEntity> _userManager;
-    private readonly RoleManager<IdentityRole<Guid>> _roleManager;
-
-    public OpenIddictProfileService(
-        SignInManager<UserEntity> signInManager,
-        IOpenIddictScopeManager scopeManager,
-        UserManager<UserEntity> userManager,
-        RoleManager<IdentityRole<Guid>> roleManager)
-    {
-        _signInManager = signInManager;
-        _scopeManager = scopeManager;
-        _userManager = userManager;
-        _roleManager = roleManager;
-    }
+    private readonly SignInManager<UserEntity> _signInManager = signInManager;
+    private readonly IOpenIddictScopeManager _scopeManager = scopeManager;
+    private readonly UserManager<UserEntity> _userManager = userManager;
+    private readonly RoleManager<IdentityRole<Guid>> _roleManager = roleManager;
 
     public async Task<ClaimsPrincipal> CreateAsync(UserEntity user, OpenIddictRequest request, CancellationToken ct = default)
     {
@@ -83,7 +75,10 @@ public sealed class OpenIddictProfileService : IOpenIddictProfileService
                 case Claims.Subject:
                     dest.Add(Destinations.IdentityToken);
                     break;
-                case "sid": // "sid" per OIDC Back-Channel Logout\n                    dest.Add(Destinations.IdentityToken);\n                    dest.Add(Destinations.AccessToken);\n                    break;
+                case "sid": // "sid" per OIDC Back-Channel Logout
+                    dest.Add(Destinations.IdentityToken);                    
+                    dest.Add(Destinations.AccessToken);                    
+                    break;
 
                 case Claims.Name:
                 case Claims.PreferredUsername:

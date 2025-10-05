@@ -8,6 +8,8 @@ internal class TelegramConfiguration : IEntityTypeConfiguration<TelegramEntity>
 {
     public void Configure(EntityTypeBuilder<TelegramEntity> builder)
     {
+        builder.HasKey(u => u.Id);
+
         builder.HasOne(t => t.User)
             .WithOne()
             .HasForeignKey<TelegramEntity>(t => t.UserId);

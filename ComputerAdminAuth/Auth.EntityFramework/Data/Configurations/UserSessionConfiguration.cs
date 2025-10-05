@@ -11,6 +11,7 @@ internal class UserSessionConfiguration : IEntityTypeConfiguration<UserSession>
         builder.ToTable("user_sessions");
 
         builder.HasKey(s => s.Id);
+
         builder.Property(s => s.UserId).IsRequired();
 
         builder.Property(s => s.ClientId).HasMaxLength(200);

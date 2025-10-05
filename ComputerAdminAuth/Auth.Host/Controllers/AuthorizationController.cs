@@ -446,8 +446,7 @@ public class AuthorizationController : ControllerBase
             authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
             properties: new AuthenticationProperties { RedirectUri = "/" });
     }
-
-    }
+}
 
 
 
