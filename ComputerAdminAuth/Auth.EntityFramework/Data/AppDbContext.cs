@@ -17,5 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> opt)
 
         modelBuilder.UseOpenIddict();
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.AddIndexesForKeys();
     }
 }
