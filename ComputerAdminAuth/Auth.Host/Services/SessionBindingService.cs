@@ -1,12 +1,11 @@
-using System.Security.Claims;
 using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
+using Auth.Host.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
-using Auth.Host.Extensions;
+using System.Security.Claims;
 
 namespace Auth.Host.Services;
 

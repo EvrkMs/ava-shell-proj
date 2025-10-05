@@ -3,21 +3,20 @@ using Auth.Domain.Entities;
 using Auth.EntityFramework.Data;
 using Auth.EntityFramework.Repositories;
 using Auth.Infrastructure.Data;
+using Auth.Infrastructure.Services;
 using Auth.Shared.Contracts;
 using Auth.TelegramAuth.Interface;
 using Auth.TelegramAuth.Options;
 using Auth.TelegramAuth.Service;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System.Security.Cryptography.X509Certificates;
-using System.Security.Cryptography;
-using System.IO;
 using OpenIddict.Abstractions;
-using Auth.Infrastructure.Services;
-using Microsoft.AspNetCore.Http;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Auth.Infrastructure;
 

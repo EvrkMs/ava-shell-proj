@@ -1,8 +1,8 @@
-﻿using System.Security.Claims;
-using Auth.Application.UseCases.Telegram;
+﻿using Auth.Application.UseCases.Telegram;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Validation.AspNetCore;
+using System.Security.Claims;
 
 namespace Auth.Host.Controllers;
 

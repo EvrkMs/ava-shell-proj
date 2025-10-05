@@ -1,5 +1,4 @@
 using System.Net;
-using System.Linq;
 
 namespace Auth.Host.Extensions;
 

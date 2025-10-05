@@ -1,9 +1,9 @@
 ﻿// Namespace: Auth.TelegramAuth (библиотека)
-using System.Security.Cryptography;
-using System.Text;
 using Auth.TelegramAuth.Interface;
 using Auth.TelegramAuth.Options;
 using Auth.TelegramAuth.Raw;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Auth.TelegramAuth.Service;
 

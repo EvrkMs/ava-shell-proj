@@ -1,21 +1,18 @@
-using System.Net;
-using System.Diagnostics;
-using System.Text.Json.Serialization;
-using System.Security.Cryptography.X509Certificates;
-using System.IO.Compression;
-using System.Linq;
-using Microsoft.AspNetCore.OutputCaching;
-using Microsoft.AspNetCore.ResponseCompression;
 using Auth.Application.UseCases;
+using Auth.Host.Middleware;
 using Auth.Host.ProfileService;
 using Auth.Infrastructure;
 using Auth.Infrastructure.Seeder;
-using Auth.Shared.Contracts;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using OpenIddict.Validation.AspNetCore;
-using Auth.Host.Middleware;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
+using OpenIddict.Validation.AspNetCore;
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -118,58 +115,6 @@ services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
-
-// CSP is handled by the sidecar nginx in front of this app.
-
-// Forwarded headers (X-Forwarded-For/Proto) from reverse proxy
-var fwd = new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-    RequireHeaderSymmetry = true
-};
-// Limit how many forwarders are trusted unless explicitly configured
-if (int.TryParse(cfg["ForwardedHeaders:ForwardLimit"], out var forwardLimit) && forwardLimit >= 1)
-{
-    fwd.ForwardLimit = forwardLimit;
-}
-fwd.KnownNetworks.Clear();
-fwd.KnownProxies.Clear();
-// Configure trusted proxies/networks and allowed hosts from configuration/env
-var knownProxiesCsv = cfg["ForwardedHeaders:KnownProxies"];
-if (!string.IsNullOrWhiteSpace(knownProxiesCsv))
-{
-    foreach (var s in knownProxiesCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
-    {
-        if (IPAddress.TryParse(s, out var ip))
-            fwd.KnownProxies.Add(ip);
-    }
-}
-
-var knownNetworksCsv = cfg["ForwardedHeaders:KnownNetworks"];
-if (!string.IsNullOrWhiteSpace(knownNetworksCsv))
-{
-    foreach (var s in knownNetworksCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
-    {
-        var parts = s.Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var addr) && int.TryParse(parts[1], out var prefix))
-        {
-            try { fwd.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(addr, prefix)); } catch { }
-        }
-        else if (IPAddress.TryParse(s, out var singleIp))
-        {
-            fwd.KnownProxies.Add(singleIp);
-        }
-    }
-}
-
-var allowedHostsCsv = cfg["ForwardedHeaders:AllowedHosts"];
-if (!string.IsNullOrWhiteSpace(allowedHostsCsv))
-{
-    foreach (var h in allowedHostsCsv.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
-        fwd.AllowedHosts.Add(h);
-}
-
-app.UseForwardedHeaders(fwd);
 
 app.UseCookiePolicy(new CookiePolicyOptions
 {

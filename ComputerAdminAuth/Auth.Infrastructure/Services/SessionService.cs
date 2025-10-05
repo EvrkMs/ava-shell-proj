@@ -1,4 +1,3 @@
-using System.Net;
 using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.EntityFramework.Data;

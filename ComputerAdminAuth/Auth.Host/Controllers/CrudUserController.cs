@@ -1,11 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Auth.Domain.Entities;
+﻿using Auth.Domain.Entities;
 using Auth.EntityFramework.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Validation.AspNetCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace Auth.Host.Controllers;
 

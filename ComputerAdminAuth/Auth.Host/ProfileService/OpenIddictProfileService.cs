@@ -1,8 +1,8 @@
 ﻿// Auth.Host/ProfileService/OpenIddictProfileService.cs
-using System.Security.Claims;
 using Auth.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using OpenIddict.Abstractions;
+using System.Security.Claims;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Auth.Host.ProfileService;
@@ -28,7 +28,7 @@ public sealed class OpenIddictProfileService(
         var principal = await _signInManager.CreateUserPrincipalAsync(user);
         var identity = (ClaimsIdentity)principal.Identity!;
 
-        
+
         // ����������� sub/name
         identity.AddOrReplaceClaim(Claims.Subject, user.Id.ToString());
         if (!identity.HasClaim(c => c.Type == Claims.Name))
@@ -76,8 +76,8 @@ public sealed class OpenIddictProfileService(
                     dest.Add(Destinations.IdentityToken);
                     break;
                 case "sid": // "sid" per OIDC Back-Channel Logout
-                    dest.Add(Destinations.IdentityToken);                    
-                    dest.Add(Destinations.AccessToken);                    
+                    dest.Add(Destinations.IdentityToken);
+                    dest.Add(Destinations.AccessToken);
                     break;
 
                 case Claims.Name:

@@ -1,8 +1,8 @@
-using System.ComponentModel.DataAnnotations;
 using Auth.Infrastructure; // CustomSignInManager
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.OutputCaching;
+using System.ComponentModel.DataAnnotations;
 
 namespace Auth.Host.Pages.Account
 {

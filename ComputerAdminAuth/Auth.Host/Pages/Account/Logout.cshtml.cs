@@ -1,11 +1,10 @@
-﻿using Microsoft.AspNetCore;
+﻿using Auth.Application.Interfaces;
+using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using OpenIddict.Server.AspNetCore;
-using Auth.Application.Interfaces;
-using Microsoft.AspNetCore.Http;
 
 namespace Auth.Host.Pages.Account
 {

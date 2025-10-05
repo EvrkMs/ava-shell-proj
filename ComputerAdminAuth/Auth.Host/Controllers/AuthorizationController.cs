@@ -1,18 +1,17 @@
 ﻿// Auth.Host\Controllers\AuthorizationController.cs
-using Auth.Host.Services;
-using System.Security.Claims;
+using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Host.ProfileService; // IOpenIddictProfileService
+using Auth.Host.Services;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using System.Security.Claims;
 using static OpenIddict.Abstractions.OpenIddictConstants;
-using Auth.Application.Interfaces;
 
 namespace Auth.Host.Controllers;
 

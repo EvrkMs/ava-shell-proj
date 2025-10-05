@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using Auth.Application.Interfaces;
 using OpenIddict.Abstractions;
+using System.Security.Claims;
 
 namespace Auth.Host.Middleware;
 

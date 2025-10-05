@@ -1,9 +1,9 @@
-using System.Security.Claims;
 using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Validation.AspNetCore;
+using System.Security.Claims;
 
 namespace Auth.Host.Controllers;
 

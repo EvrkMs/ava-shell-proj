@@ -9,7 +9,6 @@ services:
     restart: always
     user: "0:0"
     environment:
-      - ForwardedHeaders__KnownNetworks=${ForwardedHeaders__KnownNetworks}
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=${DefaultConnection}
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
