@@ -1,8 +1,7 @@
-# Build stage
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+# Restore stage
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS restore
 WORKDIR /src
 
-# Copy solution and project files for better layer caching
 COPY ComputerAdminAuth.sln ./
 COPY NuGet.config ./
 COPY Auth.Host/Auth.Host.csproj Auth.Host/
@@ -12,11 +11,27 @@ COPY Auth.Application/Auth.Application.csproj Auth.Application/
 COPY Auth.Domain/Auth.Domain.csproj Auth.Domain/
 COPY Auth.TelegramAuth/Auth.TelegramAuth.csproj Auth.TelegramAuth/
 COPY Auth.Shared.Contracts/Auth.Shared.Contracts.csproj Auth.Shared.Contracts/
+COPY Auth.Tests/Auth.Tests.csproj Auth.Tests/
 
 RUN dotnet restore ./Auth.Host/Auth.Host.csproj --nologo --configfile ./NuGet.config
 
-# Copy the rest and publish
+# Bring in sources
+FROM restore AS source
 COPY . ./
+
+# Test stage (used by CI to validate build)
+FROM source AS test
+RUN mkdir -p /src/TestResults/Coverage \
+    && dotnet test ./Auth.Tests/Auth.Tests.csproj \
+        --configuration Release \
+        --logger "trx;LogFileName=test_results.trx" \
+        --results-directory /src/TestResults \
+        -p:CollectCoverage=true \
+        -p:CoverletOutputFormat=cobertura \
+        -p:CoverletOutput=/src/TestResults/Coverage/
+
+# Publish stage
+FROM source AS publish
 RUN dotnet publish ./Auth.Host/Auth.Host.csproj -c Release -o /app/publish --no-restore --nologo --configfile ./NuGet.config
 
 # Runtime stage
@@ -27,7 +42,7 @@ WORKDIR /app
 ENV ASPNETCORE_URLS=https://+:5001 \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
 
-COPY --from=build /app/publish ./
+COPY --from=publish /app/publish ./
 
 # No ports published by default; can be exposed to other containers
 EXPOSE 5001

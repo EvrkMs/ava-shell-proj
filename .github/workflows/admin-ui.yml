@@ -19,31 +19,24 @@ permissions:
 
 jobs:
   build:
-    name: Install, Lint & Build
+    name: Lint & Build (Docker)
     runs-on: [self-hosted, Linux, X64]
-    env:
-      CI: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.12.0
-          cache: 'npm'
-          cache-dependency-path: UI/react-admin-spa/package-lock.json
+      - name: Build test image (runs lint & build inside)
+        run: docker build --target test -t admin-ui-test:${{ github.sha }} UI/react-admin-spa
 
-      - name: Install dependencies
-        working-directory: UI/react-admin-spa
-        run: npm ci --no-audit --no-fund
+      - name: Extract build artifacts
+        run: |
+          rm -rf UI/react-admin-spa/dist
+          docker create --name admin-ui-test-container admin-ui-test:${{ github.sha }} >/dev/null
+          docker cp admin-ui-test-container:/app/dist UI/react-admin-spa/dist
+          docker rm admin-ui-test-container >/dev/null
 
-      - name: Lint
-        working-directory: UI/react-admin-spa
-        run: npm run lint
-
-      - name: Build
-        working-directory: UI/react-admin-spa
-        run: npm run build
+      - name: Remove test image
+        if: always()
+        run: docker image rm admin-ui-test:${{ github.sha }} || true
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

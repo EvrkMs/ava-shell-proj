@@ -21,72 +21,31 @@ jobs:
   test:
     name: Test & Coverage
     runs-on: [self-hosted, Linux, X64]
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: 1
-      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 9.0.x
+      - name: Build test image (runs dotnet test inside)
+        run: docker build --target test -t computeradminauth-test:${{ github.sha }} ComputerAdminAuth
 
-      - name: Cache NuGet
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('ComputerAdminAuth/**/*.csproj') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore
-        working-directory: ComputerAdminAuth
-        run: dotnet restore
-
-      - name: Build (Release)
-        working-directory: ComputerAdminAuth
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Test (+coverage)
-        working-directory: ComputerAdminAuth
-        run: >
-          dotnet test
-          --configuration Release
-          --no-build
-          --logger "trx;LogFileName=test_results.trx"
-          --collect:"XPlat Code Coverage"
-          -p:CollectCoverage=true
-          -p:CoverletOutputFormat=cobertura
-          -p:CoverletOutput=TestResults/Coverage/
-
-      - name: Install reportgenerator
-        run: dotnet tool install -g dotnet-reportgenerator-globaltool
-
-      - name: Generate coverage report (HTML)
+      - name: Extract test artifacts
         run: |
-          mkdir -p coverage-report
-          reportgenerator \
-            -reports:"ComputerAdminAuth/**/TestResults/Coverage/coverage.cobertura.xml" \
-            -targetdir:"coverage-report" \
-            -reporttypes:HtmlSummary
-        env:
-          PATH: $HOME/.dotnet/tools:$PATH
+          rm -rf ComputerAdminAuth/TestResults
+          docker create --name computeradminauth-test-container computeradminauth-test:${{ github.sha }} >/dev/null
+          docker cp computeradminauth-test-container:/src/TestResults ComputerAdminAuth/TestResults || true
+          docker rm computeradminauth-test-container >/dev/null
+
+      - name: Remove test image
+        if: always()
+        run: docker image rm computeradminauth-test:${{ github.sha }} || true
 
       - name: Upload test results
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: admin-test-results
-          path: ComputerAdminAuth/**/TestResults/*.trx
-          if-no-files-found: warn
-
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: admin-coverage
           path: |
-            ComputerAdminAuth/**/TestResults/Coverage/coverage.cobertura.xml
-            coverage-report/**
+            ComputerAdminAuth/TestResults/*.trx
+            ComputerAdminAuth/TestResults/Coverage/coverage.cobertura.xml
           if-no-files-found: warn
 
   build-image:
