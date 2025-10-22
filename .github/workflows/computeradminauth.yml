@@ -133,37 +133,17 @@ jobs:
           chmod 600 "$AUTH_ENV_PATH"
           echo "AUTH_ENV_PATH=$AUTH_ENV_PATH" >> "$GITHUB_ENV"
 
-      - name: Verify database connectivity
+      - name: Database connectivity smoke test (data-network)
         env:
           AUTH_ENV_PATH: ${{ env.AUTH_ENV_PATH }}
         run: |
-          CONNECTION=$(grep '^ConnectionStrings__DefaultConnection=' "$AUTH_ENV_PATH" | cut -d= -f2-)
-          if [ -z "$CONNECTION" ]; then
-            echo "::error::ConnectionStrings__DefaultConnection is not set in $AUTH_ENV_PATH" >&2
-            exit 1
-          fi
-          kv() {
-            echo "$CONNECTION" | tr ';' '\n' | awk -F= -v key="$1" 'tolower($1)==tolower(key){print substr($0,index($0,"=")+1)}'
-          }
-          HOST=$(kv Host)
-          PORT=$(kv Port)
-          DB=$(kv Database)
-          USER=$(kv Username)
-          PASS=$(kv Password)
-          SSL=$(kv Sslmode)
-          if [ -z "$HOST" ] || [ -z "$DB" ] || [ -z "$USER" ] || [ -z "$PASS" ]; then
-            echo "::error::Connection string must include Host, Database, Username and Password values." >&2
-            exit 1
-          fi
-          PORT=${PORT:-5432}
-          echo "Testing connectivity to $HOST:$PORT/$DB as $USER"
-          docker pull -q postgres:16-alpine
-          docker run --rm --network host \
-            -e PGPASSWORD="$PASS" \
-            ${SSL:+-e PGSSLMODE=$SSL} \
-            postgres:16-alpine \
-            sh -c "psql -h \"$HOST\" -p \"$PORT\" -U \"$USER\" -d \"$DB\" -c 'select 1'" >/dev/null
-          echo "Database connectivity OK."
+          docker run --rm \
+            --user $(id -u):$(id -g) \
+            --network data-network \
+            --env-file "$AUTH_ENV_PATH" \
+            -e SKIP_DB_TESTS=false \
+            computeradminauth-test:${{ github.sha }} \
+            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
 
       - name: Deploy via docker compose
         env:
