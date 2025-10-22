@@ -7,7 +7,10 @@ namespace Auth.Tests;
 
 public class DatabaseConnectivityTests
 {
-    private static bool ShouldSkip => string.Equals(Environment.GetEnvironmentVariable("SKIP_DB_TESTS"), "true", StringComparison.OrdinalIgnoreCase);
+    private static readonly bool ShouldSkip = string.Equals(
+        Environment.GetEnvironmentVariable("SKIP_DB_TESTS"),
+        "true",
+        StringComparison.OrdinalIgnoreCase);
 
     [Fact(DisplayName = "ConnectionStrings__DefaultConnection allows opening a PostgreSQL connection"), Trait("Category", "DatabaseConnectivity")]
     public async Task ConnectionString_AllowsOpeningConnection()

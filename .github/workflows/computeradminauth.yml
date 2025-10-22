@@ -44,6 +44,15 @@ jobs:
             ComputerAdminAuth/TestResults/Coverage/coverage.cobertura.xml
           if-no-files-found: warn
 
+      - name: Save test image
+        run: docker save computeradminauth-test:${{ github.sha }} | gzip > computeradminauth-test.tar.gz
+
+      - name: Upload test image tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: computeradminauth-test-image
+          path: computeradminauth-test.tar.gz
+
   build-image:
     name: Build Docker Image
     needs: test
@@ -52,6 +61,15 @@ jobs:
       image-owner: ${{ steps.normalize.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download test image
+        uses: actions/download-artifact@v4
+        with:
+          name: computeradminauth-test-image
+          path: /tmp
+
+      - name: Load test image
+        run: docker load < /tmp/computeradminauth-test.tar.gz || true
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -76,10 +94,10 @@ jobs:
           context: ComputerAdminAuth
           file: ComputerAdminAuth/Auth.Host/Dockerfile
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+          cache-from: type=gha
           tags: |
             ghcr.io/${{ steps.normalize.outputs.owner }}/computer-admin-auth:${{ github.sha }}
             ghcr.io/${{ steps.normalize.outputs.owner }}/computer-admin-auth:master
-          cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
@@ -89,6 +107,15 @@ jobs:
     runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download test image
+        uses: actions/download-artifact@v4
+        with:
+          name: computeradminauth-test-image
+          path: /tmp
+
+      - name: Load test image
+        run: docker load < /tmp/computeradminauth-test.tar.gz || true
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -112,13 +139,10 @@ jobs:
           echo "AUTH_ENV_PATH=$AUTH_ENV_PATH" >> "$GITHUB_ENV"
 
       - name: Database connectivity smoke test (data-network)
-        env:
-          AUTH_ENV_PATH: ${{ env.AUTH_ENV_PATH }}
         run: |
           docker run --rm \
             --network data-network \
-            --env-file "$AUTH_ENV_PATH" \
-            -e ConnectionStrings__DefaultConnection=$(grep '^ConnectionStrings__DefaultConnection=' "$AUTH_ENV_PATH" | cut -d= -f2-) \
+            --env-file "${HOME}/.config/ava/auth-host.env" \
             computeradminauth-test:${{ github.sha }} \
             dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
 
