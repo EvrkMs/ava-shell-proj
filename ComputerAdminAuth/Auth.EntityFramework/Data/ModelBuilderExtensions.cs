@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace Auth.EntityFramework.Data;
 
@@ -18,10 +19,16 @@ public static class ModelBuilderExtensions
                 // Добавляем индекс только если FK участвует в каскадном удалении или явно используется
                 if (fk.DeleteBehavior != DeleteBehavior.NoAction)
                 {
-                    var props = fk.Properties.Select(p => p.Name).ToArray();
+                    var propertyNames = fk.Properties.Select(p => p.Name).ToArray();
+                    var hasExistingIndex = entityType.GetIndexes()
+                        .Any(idx => idx.Properties.Select(p => p.Name)
+                            .SequenceEqual(propertyNames));
+
+                    if (hasExistingIndex) continue;
+
                     modelBuilder.Entity(entityType.ClrType)
-                        .HasIndex(props)
-                        .HasDatabaseName($"IX_{entityType.GetTableName()}_{string.Join("_", props)}");
+                        .HasIndex(propertyNames)
+                        .HasDatabaseName($"IX_{entityType.GetTableName()}_{string.Join("_", propertyNames)}");
                 }
             }
         }
