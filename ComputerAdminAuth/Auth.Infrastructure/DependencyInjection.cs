@@ -42,6 +42,14 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(options =>
         {
             var cs = config.GetConnectionString("DefaultConnection");
+
+            // GitHub Secrets делает всё UPPERCASE, поэтому ищем вручную
+            if (string.IsNullOrEmpty(cs))
+                cs = config["CONNECTIONSTRINGS__DEFAULTCONNECTION"];
+
+            if (string.IsNullOrEmpty(cs))
+                throw new InvalidOperationException("Database connection string not found in configuration or environment.");
+
             options.UseNpgsql(cs, npgsql =>
             {
                 // Resiliency against transient DB/network issues + sane timeouts
