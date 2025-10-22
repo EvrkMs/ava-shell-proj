@@ -27,6 +27,29 @@ jobs:
       - name: Build test image (runs dotnet test inside)
         run: docker build --target test -t computeradminauth-test:${{ github.sha }} -f ComputerAdminAuth/Auth.Host/Dockerfile ComputerAdminAuth
 
+      - name: Ensure auth secret file exists for tests
+        run: |
+          AUTH_ENV_PATH="${HOME}/.config/ava/auth-host.env"
+          if [ ! -f "$AUTH_ENV_PATH" ]; then
+            echo "::error::Missing required secret file $AUTH_ENV_PATH on test host." >&2
+            exit 1
+          fi
+          chmod 600 "$AUTH_ENV_PATH"
+          echo "AUTH_ENV_PATH=$AUTH_ENV_PATH" >> "$GITHUB_ENV"
+
+      - name: Database connectivity smoke test (data-network)
+        env:
+          AUTH_ENV_PATH: ${{ env.AUTH_ENV_PATH }}
+        run: |
+          docker run --rm \
+            --network data-network \
+            --env-file "$AUTH_ENV_PATH" \
+            -e SKIP_DB_TESTS=false \
+            -v "$PWD/ComputerAdminAuth":/src \
+            -w /src \
+            mcr.microsoft.com/dotnet/sdk:9.0 \
+            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --filter "Category=DatabaseConnectivity"
+
       - name: Extract test artifacts
         run: |
           rm -rf ComputerAdminAuth/TestResults

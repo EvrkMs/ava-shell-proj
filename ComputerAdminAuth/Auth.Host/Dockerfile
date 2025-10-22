@@ -22,7 +22,7 @@ COPY . ./
 # Test stage (used by CI to validate build)
 FROM source AS test
 RUN mkdir -p /src/TestResults/Coverage \
-    && dotnet test ./Auth.Tests/Auth.Tests.csproj \
+    && SKIP_DB_TESTS=true dotnet test ./Auth.Tests/Auth.Tests.csproj \
         --configuration Release \
         --logger "trx;LogFileName=test_results.trx" \
         --results-directory /src/TestResults \
