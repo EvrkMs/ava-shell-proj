@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build test image (runs dotnet test inside)
-        run: docker build --target test -t computeradminauth-test:${{ github.sha }} ComputerAdminAuth
+        run: docker build --target test -t computeradminauth-test:${{ github.sha }} -f ComputerAdminAuth/Auth.Host/Dockerfile ComputerAdminAuth
 
       - name: Extract test artifacts
         run: |
