@@ -23,6 +23,7 @@ COPY . ./
 FROM source AS test
 RUN mkdir -p /src/TestResults/Coverage \
     && SKIP_DB_TESTS=true dotnet test ./Auth.Tests/Auth.Tests.csproj \
+        --no-restore \
         --configuration Release \
         --logger "trx;LogFileName=test_results.trx" \
         --results-directory /src/TestResults \
