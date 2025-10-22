@@ -8,18 +8,8 @@ services:
     hostname: auth-host
     restart: always
     user: "0:0"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=${DefaultConnection}
-      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
-      - Telegram__AllowedClockSkewSeconds=60
-      - OIDC_SVC_REPORTING_SECRET=${OIDC_SVC_REPORTING_SECRET}
-      - OIDC_SVC_INTROSPECTOR_SECRET=${OIDC_SVC_INTROSPECTOR_SECRET}
-      - OIDC_RESOURCE_SECRET=${OIDC_RESOURCE_SECRET}
-      - AUTH_ROOT_PASSWORD=${AUTH_ROOT_PASSWORD}
-      - OIDC_SIGNING_CERTIFICATE_PATH=/keys/openiddict/signing.pfx
-      - OIDC_SIGNING_CERTIFICATE_PASSWORD=${OIDC_SIGNING_CERTIFICATE_PASSWORD}
-      - DataProtection__KeysDirectory=/keys/dataprotection
+    env_file:
+      - ${AUTH_ENV_FILE:?Set AUTH_ENV_FILE to the path of auth-host.env}
     expose:
       - "5001"
     volumes:
