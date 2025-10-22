@@ -63,6 +63,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize image owner
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_OWNER=$OWNER" >> "$GITHUB_ENV"
+
       - name: Build (and optionally push) image
         uses: docker/build-push-action@v6
         with:
@@ -70,7 +75,7 @@ jobs:
           file: UI/react-admin-spa/Dockerfile
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           tags: |
-            ghcr.io/${{ lower(github.repository_owner) }}/ui:${{ github.sha }}
-            ghcr.io/${{ lower(github.repository_owner) }}/ui:master
+            ghcr.io/${{ env.IMAGE_OWNER }}/ui:${{ github.sha }}
+            ghcr.io/${{ env.IMAGE_OWNER }}/ui:master
           cache-from: type=gha
           cache-to: type=gha,mode=max
