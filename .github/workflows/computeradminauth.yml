@@ -46,15 +46,8 @@ jobs:
             --network data-network \
             --env-file "$AUTH_ENV_PATH" \
             -e SKIP_DB_TESTS=false \
-            -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
-            -e DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
-            -e DOTNET_CLI_HOME=/tmp/dotnet_cli_home \
-            -v /tmp/dotnet_cli_home:/tmp/dotnet_cli_home \
-            -v "$PWD/ComputerAdminAuth":/src \
-            -w /src \
-            --entrypoint sh \
-            mcr.microsoft.com/dotnet/sdk:9.0 \
-            -c "mkdir -p /tmp/dotnet_cli_home && dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter 'Category=DatabaseConnectivity'"
+            computeradminauth-test:${{ github.sha }} \
+            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
 
       - name: Extract test artifacts
         run: |
@@ -62,10 +55,6 @@ jobs:
           docker create --name computeradminauth-test-container computeradminauth-test:${{ github.sha }} >/dev/null
           docker cp computeradminauth-test-container:/src/TestResults ComputerAdminAuth/TestResults || true
           docker rm computeradminauth-test-container >/dev/null
-
-      - name: Remove test image
-        if: always()
-        run: docker image rm computeradminauth-test:${{ github.sha }} || true
 
       - name: Upload test results
         if: success()
