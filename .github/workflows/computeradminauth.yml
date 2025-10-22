@@ -42,6 +42,7 @@ jobs:
           AUTH_ENV_PATH: ${{ env.AUTH_ENV_PATH }}
         run: |
           docker run --rm \
+            --user $(id -u):$(id -g) \
             --network data-network \
             --env-file "$AUTH_ENV_PATH" \
             -e SKIP_DB_TESTS=false \
