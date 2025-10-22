@@ -52,8 +52,9 @@ jobs:
             -v /tmp/dotnet_cli_home:/tmp/dotnet_cli_home \
             -v "$PWD/ComputerAdminAuth":/src \
             -w /src \
+            --entrypoint sh \
             mcr.microsoft.com/dotnet/sdk:9.0 \
-            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
+            -c "mkdir -p /tmp/dotnet_cli_home && dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter 'Category=DatabaseConnectivity'"
 
       - name: Extract test artifacts
         run: |
