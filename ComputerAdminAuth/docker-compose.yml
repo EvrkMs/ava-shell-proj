@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Auth.Host/Dockerfile
-    image: auth-host:latest
+    image: ${AUTH_IMAGE:-auth-host:latest}
     container_name: auth-host
     hostname: auth-host
     restart: always

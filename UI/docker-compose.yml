@@ -4,7 +4,7 @@ services:
     build:
       context: ./react-admin-spa
       dockerfile: Dockerfile
-    image: admin-ui:latest
+    image: ${UI_IMAGE:-admin-ui:latest}
     expose:
       - "5000"  # host:container
     networks:
@@ -15,4 +15,3 @@ networks:
   nginx_network:
     external: true
     name: nginx_network
-
