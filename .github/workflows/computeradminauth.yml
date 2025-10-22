@@ -20,7 +20,7 @@ permissions:
 jobs:
   test:
     name: Test & Coverage
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +51,7 @@ jobs:
   build-image:
     name: Build Docker Image
     needs: test
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
 
