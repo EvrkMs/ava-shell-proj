@@ -24,39 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build test image (runs dotnet test inside)
+      - name: Build test image (unit tests inside Dockerfile)
         run: docker build --target test -t computeradminauth-test:${{ github.sha }} -f ComputerAdminAuth/Auth.Host/Dockerfile ComputerAdminAuth
 
-      - name: Ensure auth secret file exists for tests
-        run: |
-          AUTH_ENV_PATH="${HOME}/.config/ava/auth-host.env"
-          if [ ! -f "$AUTH_ENV_PATH" ]; then
-            echo "::error::Missing required secret file $AUTH_ENV_PATH on test host." >&2
-            exit 1
-          fi
-          chmod 600 "$AUTH_ENV_PATH"
-          echo "AUTH_ENV_PATH=$AUTH_ENV_PATH" >> "$GITHUB_ENV"
-
-      - name: Database connectivity smoke test (data-network)
-        env:
-          AUTH_ENV_PATH: ${{ env.AUTH_ENV_PATH }}
-        run: |
-          docker run --rm \
-            --user $(id -u):$(id -g) \
-            --network data-network \
-            --env-file "$AUTH_ENV_PATH" \
-            -e SKIP_DB_TESTS=false \
-            computeradminauth-test:${{ github.sha }} \
-            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
-
-      - name: Extract test artifacts
+      - name: Extract unit-test artifacts
         run: |
           rm -rf ComputerAdminAuth/TestResults
           docker create --name computeradminauth-test-container computeradminauth-test:${{ github.sha }} >/dev/null
           docker cp computeradminauth-test-container:/src/TestResults ComputerAdminAuth/TestResults || true
           docker rm computeradminauth-test-container >/dev/null
 
-      - name: Upload test results
+      - name: Upload unit-test results
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -124,7 +102,7 @@ jobs:
 
       - name: Ensure auth secret file exists
         run: |
-          AUTH_ENV_PATH="/ava-vm/home/.config/ava/auth-host.env"
+          AUTH_ENV_PATH="${HOME}/.config/ava/auth-host.env"
           mkdir -p "$(dirname "$AUTH_ENV_PATH")"
           if [ ! -f "$AUTH_ENV_PATH" ]; then
             echo "::error::Missing required secret file $AUTH_ENV_PATH on deploy host." >&2
@@ -140,7 +118,7 @@ jobs:
           docker run --rm \
             --network data-network \
             --env-file "$AUTH_ENV_PATH" \
-            -e SKIP_DB_TESTS=false \
+            -e ConnectionStrings__DefaultConnection=$(grep '^ConnectionStrings__DefaultConnection=' "$AUTH_ENV_PATH" | cut -d= -f2-) \
             computeradminauth-test:${{ github.sha }} \
             dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
 
