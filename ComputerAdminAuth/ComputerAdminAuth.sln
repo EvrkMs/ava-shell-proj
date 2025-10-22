@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auth.TelegramAuth", "Auth.T
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Auth", "Auth", "{45D1C0F8-D778-44D4-A22C-DDFD360A4002}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Auth.Tests", "Auth.Tests\Auth.Tests.csproj", "{636E85C3-1C6B-4584-B105-5D23F051157A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,10 @@ Global
 		{346DEC44-982C-4029-B448-B149A54F09A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{346DEC44-982C-4029-B448-B149A54F09A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{346DEC44-982C-4029-B448-B149A54F09A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{636E85C3-1C6B-4584-B105-5D23F051157A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{636E85C3-1C6B-4584-B105-5D23F051157A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{636E85C3-1C6B-4584-B105-5D23F051157A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{636E85C3-1C6B-4584-B105-5D23F051157A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

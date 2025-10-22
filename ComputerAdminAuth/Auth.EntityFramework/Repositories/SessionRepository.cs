@@ -10,8 +10,15 @@ public class SessionRepository(AppDbContext db) : ISessionRepository
     public async Task<UserSession?> GetAsync(Guid id, CancellationToken ct = default)
         => await db.UserSessions.FirstOrDefaultAsync(s => s.Id == id, ct);
 
-    public async Task<UserSession?> GetActiveAsync(Guid id, CancellationToken ct = default)
-        => await db.UserSessions.FirstOrDefaultAsync(s => s.Id == id && !s.Revoked && (s.ExpiresAt == null || s.ExpiresAt > DateTime.UtcNow), ct);
+    public async Task<UserSession?> GetByReferenceAsync(string referenceId, CancellationToken ct = default)
+        => await db.UserSessions.FirstOrDefaultAsync(s => s.ReferenceId == referenceId, ct);
+
+    public async Task<UserSession?> GetActiveByReferenceAsync(string referenceId, CancellationToken ct = default)
+        => await db.UserSessions.FirstOrDefaultAsync(s =>
+            s.ReferenceId == referenceId &&
+            !s.Revoked &&
+            (s.ExpiresAt == null || s.ExpiresAt > DateTime.UtcNow),
+            ct);
 
     public async Task<UserSession> AddAsync(UserSession session, CancellationToken ct = default)
     {
@@ -36,4 +43,3 @@ public class SessionRepository(AppDbContext db) : ISessionRepository
             yield return s;
     }
 }
-

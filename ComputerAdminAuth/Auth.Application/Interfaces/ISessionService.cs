@@ -1,10 +1,33 @@
+using System;
+
 namespace Auth.Application.Interfaces;
 
 public interface ISessionService
 {
-    Task<string> EnsureInteractiveSessionAsync(Guid userId, string? clientId, string? ip, string? userAgent, string? device, TimeSpan? absoluteLifetime, CancellationToken ct = default);
-    Task<bool> TouchAsync(string sid, CancellationToken ct = default);
-    Task<bool> RevokeAsync(string sid, string? reason = null, string? by = null, CancellationToken ct = default);
-    Task<bool> IsActiveAsync(string sid, CancellationToken ct = default);
-    Task<bool> LinkAuthorizationAsync(string sid, string authorizationId, CancellationToken ct = default);
+    /// <summary>
+    /// Creates a new persistent interactive session and returns opaque tokens for browser + tokens.
+    /// </summary>
+    Task<SessionIssueResult> EnsureInteractiveSessionAsync(
+        Guid userId,
+        string? clientId,
+        string? ip,
+        string? userAgent,
+        string? device,
+        TimeSpan? absoluteLifetime,
+        CancellationToken ct = default);
+
+    Task<bool> TouchAsync(string referenceId, CancellationToken ct = default);
+    Task<bool> RevokeAsync(string referenceId, string? reason = null, string? by = null, CancellationToken ct = default);
+    Task<bool> IsActiveAsync(string referenceId, CancellationToken ct = default);
+    Task<bool> LinkAuthorizationAsync(string referenceId, string authorizationId, CancellationToken ct = default);
+    Task<SessionIssueResult?> RefreshBrowserSecretAsync(string referenceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Validates the browser cookie payload and optionally enforces active state.
+    /// Returns session metadata when successful, otherwise null.
+    /// </summary>
+    Task<SessionValidationResult?> ValidateBrowserSessionAsync(string referenceId, string secret, bool requireActive = true, CancellationToken ct = default);
 }
+
+public readonly record struct SessionIssueResult(string ReferenceId, string BrowserSecret);
+public readonly record struct SessionValidationResult(Guid SessionId, Guid UserId, DateTime? ExpiresAt, bool Revoked);

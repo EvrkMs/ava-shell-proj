@@ -1,6 +1,7 @@
 using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Host.Extensions;
+using Auth.Host.Services.Support;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,10 @@ using System.Security.Claims;
 
 namespace Auth.Host.Services;
 
+/// <summary>
+/// Couples browser cookies and OpenIddict grants with our server-side session records.
+/// Ensures every interactive login issues an opaque sid reference + a confidential browser secret.
+/// </summary>
 public sealed class SessionBindingService
 {
     private readonly ISessionService _sessions;
@@ -33,15 +38,70 @@ public sealed class SessionBindingService
         if (string.IsNullOrEmpty(sid))
             return new GuardResult(true, null);
 
-        var active = await _sessions.IsActiveAsync(sid);
-        if (active) return new GuardResult(true, null);
+        var cookieValue = http.Request.Cookies[SessionCookie.Name];
+        if (!SessionCookie.TryUnpack(cookieValue, out var cookieReference, out var secret) ||
+            !string.Equals(cookieReference, sid, StringComparison.Ordinal))
+        {
+            await ClearSessionAsync(http);
+            return await ChallengeAsync(http, request);
+        }
+
+        var validation = await _sessions.ValidateBrowserSessionAsync(cookieReference, secret, requireActive: true);
+        if (validation is not null)
+            return new GuardResult(true, null);
 
         // Clear sid cookie and sign out the application cookie to force interactive login
-        if (http.Request.Cookies.ContainsKey("sid"))
-            http.Response.Cookies.Delete("sid", new CookieOptions { Secure = true, SameSite = SameSiteMode.Lax });
+        await ClearSessionAsync(http);
+        return await ChallengeAsync(http, request);
+    }
+
+    public async Task AttachInteractiveSessionAsync(HttpContext http, ClaimsPrincipal principal, UserEntity user, string? clientId)
+    {
+        // Prefer client IP resolved via forwarded headers; fallback to proxy headers for display only
+        var ip = http.GetRealClientIp();
+        var ua = http.Request.Headers["User-Agent"].ToString();
+        var device = "web";
+        var issued = await _sessions.EnsureInteractiveSessionAsync(user.Id, clientId, ip, ua, device, TimeSpan.FromDays(30));
+        var sid = issued.ReferenceId;
+
+        var ci = (ClaimsIdentity)principal.Identity!;
+        var sidClaim = new Claim("sid", sid);
+        ci.AddClaim(sidClaim);
+        sidClaim.SetDestinations(
+            OpenIddictConstants.Destinations.IdentityToken,
+            OpenIddictConstants.Destinations.AccessToken);
+
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            IsEssential = true,
+            Expires = DateTimeOffset.UtcNow.AddDays(30)
+        };
+        http.Response.Cookies.Append(SessionCookie.Name, SessionCookie.Pack(sid, issued.BrowserSecret), cookieOptions);
+
+        // Stamp the Identity cookie with sid so silent login is session-bound
+        var cookieAuth = await http.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        if (cookieAuth?.Succeeded == true && cookieAuth.Principal?.Identity is ClaimsIdentity idCookie)
+        {
+            var existingSid = idCookie.FindFirst("sid");
+            if (existingSid is not null) idCookie.RemoveClaim(existingSid);
+            idCookie.AddClaim(new Claim("sid", sid));
+            await http.SignInAsync(IdentityConstants.ApplicationScheme, cookieAuth.Principal);
+        }
+    }
+
+    private async Task ClearSessionAsync(HttpContext http)
+    {
+        if (http.Request.Cookies.ContainsKey(SessionCookie.Name))
+            http.Response.Cookies.Delete(SessionCookie.Name, new CookieOptions { Secure = true, SameSite = SameSiteMode.Lax });
 
         await _signIn.SignOutAsync();
+    }
 
+    private async Task<GuardResult> ChallengeAsync(HttpContext http, OpenIddictRequest request)
+    {
         if (request.Prompt == "none")
         {
             var props = new AuthenticationProperties(new Dictionary<string, string?>
@@ -59,41 +119,5 @@ public sealed class SessionBindingService
             RedirectUri = http.Request.PathBase + http.Request.Path + QueryString.Create(parameters)
         };
         return new GuardResult(false, new ChallengeResult(new[] { IdentityConstants.ApplicationScheme }, chProps));
-    }
-
-    public async Task AttachInteractiveSessionAsync(HttpContext http, ClaimsPrincipal principal, UserEntity user, string? clientId)
-    {
-        // Prefer client IP resolved via forwarded headers; fallback to proxy headers for display only
-        var ip = http.GetRealClientIp();
-        var ua = http.Request.Headers["User-Agent"].ToString();
-        var device = "web";
-        var sid = await _sessions.EnsureInteractiveSessionAsync(user.Id, clientId, ip, ua, device, TimeSpan.FromDays(30));
-
-        var ci = (ClaimsIdentity)principal.Identity!;
-        var sidClaim = new Claim("sid", sid);
-        ci.AddClaim(sidClaim);
-        sidClaim.SetDestinations(
-            OpenIddictConstants.Destinations.IdentityToken,
-            OpenIddictConstants.Destinations.AccessToken);
-
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            IsEssential = true,
-            Expires = DateTimeOffset.UtcNow.AddDays(30)
-        };
-        http.Response.Cookies.Append("sid", sid, cookieOptions);
-
-        // Stamp the Identity cookie with sid so silent login is session-bound
-        var cookieAuth = await http.AuthenticateAsync(IdentityConstants.ApplicationScheme);
-        if (cookieAuth?.Succeeded == true && cookieAuth.Principal?.Identity is ClaimsIdentity idCookie)
-        {
-            var existingSid = idCookie.FindFirst("sid");
-            if (existingSid is not null) idCookie.RemoveClaim(existingSid);
-            idCookie.AddClaim(new Claim("sid", sid));
-            await http.SignInAsync(IdentityConstants.ApplicationScheme, cookieAuth.Principal);
-        }
     }
 }

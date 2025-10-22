@@ -3,10 +3,12 @@ using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Host.ProfileService; // IOpenIddictProfileService
 using Auth.Host.Services;
+using Auth.Host.Services.Support;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -52,14 +54,21 @@ public class AuthorizationController : ControllerBase
         var request = HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
 
-        // If the browser has a 'sid' cookie that was revoked, prevent silent re-login by clearing cookies
-        if (Request.Cookies.TryGetValue("sid", out var cookieSid) && !string.IsNullOrWhiteSpace(cookieSid))
+        // If the browser has a sid cookie, ensure it is valid before attempting silent re-login.
+        if (Request.Cookies.TryGetValue(SessionCookie.Name, out var rawSidCookie))
         {
-            var stillActive = await _sessions.IsActiveAsync(cookieSid);
-            if (!stillActive)
+            if (SessionCookie.TryUnpack(rawSidCookie, out var reference, out var secret))
             {
-                Response.Cookies.Delete("sid", new CookieOptions { Secure = true, SameSite = SameSiteMode.Lax });
-                await _signInManager.SignOutAsync();
+                var stillValid = await _sessions.ValidateBrowserSessionAsync(reference, secret);
+                if (stillValid is null)
+                {
+                    DeleteSidCookie(SameSiteMode.Lax);
+                    await _signInManager.SignOutAsync();
+                }
+            }
+            else
+            {
+                DeleteSidCookie(SameSiteMode.Lax);
             }
         }
 
@@ -128,6 +137,7 @@ public class AuthorizationController : ControllerBase
             authorizations.Add(authorization);
         }
 
+        // Evaluate consent policy for this client and branch accordingly.
         var consentType = await _applicationManager.GetConsentTypeAsync(application);
 
         switch (consentType)
@@ -151,24 +161,7 @@ public class AuthorizationController : ControllerBase
                     // Create/attach server-side session (sid)
                     await _sessionBinder.AttachInteractiveSessionAsync(HttpContext, principal, user, request.ClientId);
 
-                    // Создаём постоянную авторизацию при необходимости
-                    var authorization = authorizations.LastOrDefault();
-                    authorization ??= await _authorizationManager.CreateAsync(
-                        principal: principal,
-                        subject: user.Id.ToString(),
-                        client: await _applicationManager.GetIdAsync(application),
-                        type: AuthorizationTypes.Permanent,
-                        scopes: principal.GetScopes());
-
-                    var authId = await _authorizationManager.GetIdAsync(authorization);
-                    // Ensure isolation: create a distinct authorization per interactive session
-                    var isolatedAuthorization = await _authorizationManager.CreateAsync(
-                        principal: principal,
-                        subject: user.Id.ToString(),
-                        client: await _applicationManager.GetIdAsync(application),
-                        type: AuthorizationTypes.Permanent,
-                        scopes: principal.GetScopes());
-                    authId = await _authorizationManager.GetIdAsync(isolatedAuthorization);
+                    var authId = await CreatePerSessionAuthorizationAsync(principal, user, application);
                     principal.SetAuthorizationId(authId);
                     // Link authorization to current DB session for cascade token revocation
                     var sidVal = principal.GetClaim("sid");
@@ -196,14 +189,7 @@ public class AuthorizationController : ControllerBase
 
                     await _sessionBinder.AttachInteractiveSessionAsync(HttpContext, consentPrincipal, user, request.ClientId);
 
-                    var auth = await _authorizationManager.CreateAsync(
-                        principal: consentPrincipal,
-                        subject: user.Id.ToString(),
-                        client: await _applicationManager.GetIdAsync(application),
-                        type: AuthorizationTypes.Permanent,
-                        scopes: consentPrincipal.GetScopes());
-
-                    var authId = await _authorizationManager.GetIdAsync(auth);
+                    var authId = await CreatePerSessionAuthorizationAsync(consentPrincipal, user, application);
                     consentPrincipal.SetAuthorizationId(authId);
                     // Link the current sid to the authorization for precise revocation later
                     var sidVal = consentPrincipal.GetClaim("sid");
@@ -290,9 +276,8 @@ public class AuthorizationController : ControllerBase
                 sidClaim.SetDestinations(
                     OpenIddictConstants.Destinations.IdentityToken,
                     OpenIddictConstants.Destinations.AccessToken);
-                await _sessions.TouchAsync(sid);
-                var active = await _sessions.IsActiveAsync(sid);
-                if (!active)
+                var renewed = await _sessions.RefreshBrowserSecretAsync(sid);
+                if (renewed is null)
                 {
                     return Forbid(
                         authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
@@ -312,7 +297,7 @@ public class AuthorizationController : ControllerBase
                     IsEssential = true,
                     Expires = DateTimeOffset.UtcNow.AddDays(30)
                 };
-                Response.Cookies.Append("sid", sid, cookieOptions);
+                Response.Cookies.Append(SessionCookie.Name, SessionCookie.Pack(renewed.Value.ReferenceId, renewed.Value.BrowserSecret), cookieOptions);
             }
 
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -406,14 +391,11 @@ public class AuthorizationController : ControllerBase
         {
             var oidc = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             var principal = oidc?.Principal;
-            var sid = principal?.GetClaim("sid");
-            if (string.IsNullOrEmpty(sid))
+            string? sid = principal?.GetClaim("sid");
+            if (string.IsNullOrEmpty(sid) && Request.Cookies.TryGetValue(SessionCookie.Name, out var rawSid) &&
+                SessionCookie.TryUnpack(rawSid, out var reference, out _))
             {
-                // Fallback: try from secure cookie set at sign-in
-                if (Request.Cookies.TryGetValue("sid", out var cookieSid) && !string.IsNullOrWhiteSpace(cookieSid))
-                {
-                    sid = cookieSid;
-                }
+                sid = reference;
             }
             if (!string.IsNullOrEmpty(sid))
             {
@@ -427,10 +409,7 @@ public class AuthorizationController : ControllerBase
         }
 
         // Clean up sid cookie regardless
-        if (Request.Cookies.ContainsKey("sid"))
-        {
-            Response.Cookies.Delete("sid", new CookieOptions { Secure = true, SameSite = SameSiteMode.Lax });
-        }
+        DeleteSidCookie(SameSiteMode.Lax);
 
         await _signInManager.SignOutAsync();
 
@@ -445,7 +424,40 @@ public class AuthorizationController : ControllerBase
             authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
             properties: new AuthenticationProperties { RedirectUri = "/" });
     }
+
+    /// <summary>
+    /// OpenIddict does not expose session scoping out of the box.
+    /// We mint a dedicated permanent authorization per interactive session so that revoking the session
+    /// reliably tears down refresh/access tokens created through it.
+    /// </summary>
+    private async Task<string> CreatePerSessionAuthorizationAsync(ClaimsPrincipal principal, UserEntity user, object application)
+    {
+        var clientId = await _applicationManager.GetIdAsync(application)
+            ?? throw new InvalidOperationException("Client identifier could not be resolved.");
+
+        var authorization = await _authorizationManager.CreateAsync(
+            principal: principal,
+            subject: user.Id.ToString(),
+            client: clientId,
+            type: AuthorizationTypes.Permanent,
+            scopes: principal.GetScopes());
+
+        var authorizationId = await _authorizationManager.GetIdAsync(authorization);
+        if (string.IsNullOrEmpty(authorizationId))
+            throw new InvalidOperationException("Unable to resolve authorization id.");
+
+        return authorizationId;
+    }
+
+    private void DeleteSidCookie(SameSiteMode sameSiteMode)
+    {
+        if (Request.Cookies.ContainsKey(SessionCookie.Name))
+        {
+            Response.Cookies.Delete(SessionCookie.Name, new CookieOptions
+            {
+                Secure = true,
+                SameSite = sameSiteMode
+            });
+        }
+    }
 }
-
-
-

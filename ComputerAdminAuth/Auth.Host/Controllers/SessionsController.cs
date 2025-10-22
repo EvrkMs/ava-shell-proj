@@ -3,6 +3,7 @@ using Auth.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Validation.AspNetCore;
+using System;
 using System.Security.Claims;
 
 namespace Auth.Host.Controllers;
@@ -32,24 +33,24 @@ public class SessionsController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = "ApiRead")]
-    public async Task<ActionResult<IEnumerable<UserSession>>> List([FromQuery] bool all = false, CancellationToken ct = default)
+    public async Task<ActionResult<IEnumerable<UserSessionDto>>> List([FromQuery] bool all = false, CancellationToken ct = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
-        var result = new List<UserSession>();
+        var result = new List<UserSessionDto>();
         await foreach (var s in _repo.ListByUserAsync(userId, onlyActive: !all, ct: ct))
-            result.Add(s);
+            result.Add(ToDto(s));
         return Ok(result);
     }
 
     [HttpGet("current")]
     [Authorize(Policy = "ApiRead")]
-    public async Task<ActionResult<UserSession>> Current(CancellationToken ct = default)
+    public async Task<ActionResult<UserSessionDto>> Current(CancellationToken ct = default)
     {
         var sid = User.FindFirstValue("sid");
-        if (string.IsNullOrWhiteSpace(sid) || !Guid.TryParseExact(sid, "N", out var id))
+        if (string.IsNullOrWhiteSpace(sid))
             return NotFound(new { error = "no_sid" });
-        var s = await _repo.GetAsync(id, ct);
-        return s is null ? NotFound() : Ok(s);
+        var s = await _repo.GetByReferenceAsync(sid, ct);
+        return s is null ? NotFound() : Ok(ToDto(s));
     }
 
     [HttpPost("revoke-all")]
@@ -62,7 +63,7 @@ public class SessionsController : ControllerBase
         var count = 0;
         await foreach (var s in _repo.ListByUserAsync(userId, onlyActive: true, ct: ct))
         {
-            var sid = s.Id.ToString("N");
+            var sid = s.ReferenceId;
             if (!string.IsNullOrWhiteSpace(currentSid) && string.Equals(sid, currentSid, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (await _sessions.RevokeAsync(sid, reason: "user_revoked_all", by: userId.ToString(), ct))
@@ -79,8 +80,38 @@ public class SessionsController : ControllerBase
         var s = await _repo.GetAsync(id, ct);
         if (s is null) return NotFound();
         if (s.UserId != userId) return Forbid();
-        if (!await _sessions.RevokeAsync(id.ToString("N"), reason: "user_revoked", by: userId.ToString(), ct))
+        if (!await _sessions.RevokeAsync(s.ReferenceId, reason: "user_revoked", by: userId.ToString(), ct))
             return NoContent();
         return NoContent();
     }
+
+    private static UserSessionDto ToDto(UserSession s) => new()
+    {
+        Id = s.Id,
+        ReferenceId = s.ReferenceId,
+        Device = s.Device,
+        ClientId = s.ClientId,
+        CreatedAt = s.CreatedAt,
+        LastSeenAt = s.LastSeenAt,
+        ExpiresAt = s.ExpiresAt,
+        Revoked = s.Revoked,
+        RevokedAt = s.RevokedAt,
+        IpAddress = s.IpAddress,
+        UserAgent = s.UserAgent
+    };
+}
+
+public sealed record UserSessionDto
+{
+    public Guid Id { get; init; }
+    public string ReferenceId { get; init; } = string.Empty;
+    public string? ClientId { get; init; }
+    public string? Device { get; init; }
+    public string? IpAddress { get; init; }
+    public string? UserAgent { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime? LastSeenAt { get; init; }
+    public DateTime? ExpiresAt { get; init; }
+    public bool Revoked { get; init; }
+    public DateTime? RevokedAt { get; init; }
 }

@@ -1,4 +1,5 @@
 ﻿using Auth.Application.Interfaces;
+using Auth.Host.Services.Support;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
@@ -40,11 +41,10 @@ namespace Auth.Host.Pages.Account
                 var oidc = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
                 var principal = oidc?.Principal;
                 var sid = principal?.FindFirst("sid")?.Value;
-                if (string.IsNullOrEmpty(sid))
+                if (string.IsNullOrEmpty(sid) && Request.Cookies.TryGetValue(SessionCookie.Name, out var raw) &&
+                    SessionCookie.TryUnpack(raw, out var reference, out _))
                 {
-                    // Fallback: try from secure cookie set at sign-in
-                    if (Request.Cookies.TryGetValue("sid", out var cookieSid) && !string.IsNullOrWhiteSpace(cookieSid))
-                        sid = cookieSid;
+                    sid = reference;
                 }
                 if (!string.IsNullOrEmpty(sid))
                 {
@@ -55,9 +55,9 @@ namespace Auth.Host.Pages.Account
             catch { }
 
             // Clean up sid cookie regardless
-            if (Request.Cookies.ContainsKey("sid"))
+            if (Request.Cookies.ContainsKey(SessionCookie.Name))
             {
-                Response.Cookies.Delete("sid", new CookieOptions { Secure = true, SameSite = SameSiteMode.None });
+                Response.Cookies.Delete(SessionCookie.Name, new CookieOptions { Secure = true, SameSite = SameSiteMode.None });
             }
 
             await SignOutAllAsync();
@@ -90,5 +90,4 @@ namespace Auth.Host.Pages.Account
             => (!string.IsNullOrWhiteSpace(url) && Url.IsLocalUrl(url)) ? url! : "/";
     }
 }
-
 

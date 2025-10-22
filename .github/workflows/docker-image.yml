@@ -18,7 +18,7 @@ on:
 jobs:
   # Определяем, что изменилось
   changes:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, AVA-VM]
     outputs:
       ui: ${{ steps.filter.outputs.ui }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -37,16 +37,17 @@ jobs:
   test_admin:
     needs: changes
     if: needs.changes.outputs.admin == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, AVA-VM]
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            8.0.x
-            7.0.x
+          dotnet-version: 9.0.x
 
       - name: Cache NuGet
         uses: actions/cache@v4
@@ -115,7 +116,7 @@ jobs:
   build_ui:
     needs: changes
     if: needs.changes.outputs.ui == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, AVA-VM]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Buildx
@@ -146,7 +147,7 @@ jobs:
     # важный момент: ждём и определения изменений, и (если были изменения) прохождения тестов
     needs: [changes, test_admin]
     if: needs.changes.outputs.admin == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, AVA-VM]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Buildx

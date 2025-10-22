@@ -7,6 +7,30 @@ public class UserSession
     [Key]
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    /// <summary>
+    /// Public handle returned to clients (sid claim/cookie metadata). High-entropy, opaque.
+    /// </summary>
+    [Required]
+    [MaxLength(64)]
+    public string ReferenceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Salted hash of the confidential browser secret. Never store the raw secret.
+    /// </summary>
+    [Required]
+    [MaxLength(256)]
+    public string SecretHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Salt used to derive <see cref="SecretHash"/>. Stored per-session to enable rotation.
+    /// </summary>
+    [Required]
+    [MaxLength(128)]
+    public string SecretSalt { get; set; } = string.Empty;
+
+    public DateTime SecretCreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? SecretExpiresAt { get; set; }
+
     [Required]
     public Guid UserId { get; set; }
 

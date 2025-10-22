@@ -1,0 +1,109 @@
+using Auth.EntityFramework.Data;
+using Auth.EntityFramework.Repositories;
+using Auth.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using OpenIddict.Abstractions;
+
+namespace Auth.Tests;
+
+public sealed class SessionServiceTests : IDisposable
+{
+    private readonly AppDbContext _db;
+    private readonly SessionRepository _repository;
+    private readonly SessionService _service;
+    private readonly Mock<IOpenIddictAuthorizationManager> _authorizationManager;
+    private readonly Mock<IOpenIddictTokenManager> _tokenManager;
+
+    public SessionServiceTests()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        _db = new AppDbContext(options);
+        _repository = new SessionRepository(_db);
+
+        _authorizationManager = new Mock<IOpenIddictAuthorizationManager>(MockBehavior.Loose);
+        _authorizationManager
+            .Setup(m => m.FindByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(new ValueTask<object?>(result: null));
+        _authorizationManager
+            .Setup(m => m.TryRevokeAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .Returns(new ValueTask<bool>(true));
+
+        _tokenManager = new Mock<IOpenIddictTokenManager>(MockBehavior.Loose);
+        _tokenManager
+            .Setup(m => m.FindByAuthorizationIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(EmptyTokens());
+        _tokenManager
+            .Setup(m => m.TryRevokeAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .Returns(new ValueTask<bool>(true));
+
+        _service = new SessionService(
+            _repository,
+            _db,
+            _authorizationManager.Object,
+            _tokenManager.Object);
+    }
+
+    [Fact]
+    public async Task IssueSession_ValidatesAndRotatesBrowserSecret()
+    {
+        var userId = Guid.NewGuid();
+
+        var issued = await _service.EnsureInteractiveSessionAsync(
+            userId,
+            clientId: "test-client",
+            ip: "127.0.0.1",
+            userAgent: "testsuite",
+            device: "unit-test",
+            absoluteLifetime: TimeSpan.FromHours(1));
+
+        Assert.Equal(32, issued.ReferenceId.Length);
+        Assert.False(string.IsNullOrWhiteSpace(issued.BrowserSecret));
+
+        var stored = await _repository.GetByReferenceAsync(issued.ReferenceId);
+        Assert.NotNull(stored);
+        Assert.Equal(userId, stored!.UserId);
+        Assert.NotEqual(issued.BrowserSecret, stored.SecretHash);
+
+        var validation = await _service.ValidateBrowserSessionAsync(issued.ReferenceId, issued.BrowserSecret);
+        Assert.True(validation.HasValue);
+        Assert.Equal(userId, validation!.Value.UserId);
+
+        var wrong = await _service.ValidateBrowserSessionAsync(issued.ReferenceId, "not-the-secret");
+        Assert.Null(wrong);
+
+        var rotated = await _service.RefreshBrowserSecretAsync(issued.ReferenceId);
+        Assert.NotNull(rotated);
+        Assert.NotEqual(issued.BrowserSecret, rotated!.Value.BrowserSecret);
+
+        Assert.Null(await _service.ValidateBrowserSessionAsync(issued.ReferenceId, issued.BrowserSecret));
+        Assert.True((await _service.ValidateBrowserSessionAsync(issued.ReferenceId, rotated.Value.BrowserSecret)).HasValue);
+
+        var linked = await _service.LinkAuthorizationAsync(issued.ReferenceId, "auth-id");
+        Assert.True(linked);
+
+        var revoked = await _service.RevokeAsync(issued.ReferenceId, reason: "unit-test", by: "tester");
+        Assert.True(revoked);
+        Assert.False(await _service.IsActiveAsync(issued.ReferenceId));
+        Assert.Null(await _service.ValidateBrowserSessionAsync(issued.ReferenceId, rotated.Value.BrowserSecret));
+    }
+
+    private static IAsyncEnumerable<object> EmptyTokens()
+    {
+        return Inner();
+
+        static async IAsyncEnumerable<object> Inner()
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+    }
+
+    public void Dispose()
+    {
+        _db.Dispose();
+    }
+}
