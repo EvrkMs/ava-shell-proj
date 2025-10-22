@@ -46,10 +46,14 @@ jobs:
             --network data-network \
             --env-file "$AUTH_ENV_PATH" \
             -e SKIP_DB_TESTS=false \
+            -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+            -e DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+            -e DOTNET_CLI_HOME=/tmp/dotnet_cli_home \
+            -v /tmp/dotnet_cli_home:/tmp/dotnet_cli_home \
             -v "$PWD/ComputerAdminAuth":/src \
             -w /src \
             mcr.microsoft.com/dotnet/sdk:9.0 \
-            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --filter "Category=DatabaseConnectivity"
+            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
 
       - name: Extract test artifacts
         run: |
