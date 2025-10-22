@@ -2,12 +2,12 @@ name: ComputerAdminAuth - Build & Deploy
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
     paths:
       - "ComputerAdminAuth/**"
       - ".github/workflows/computeradminauth.yml"
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
     paths:
       - "ComputerAdminAuth/**"
       - ".github/workflows/computeradminauth.yml"
@@ -18,104 +18,110 @@ permissions:
   packages: write
 
 jobs:
-  test:
-    name: Test & Coverage
-    runs-on: [self-hosted]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build test image (unit tests inside Dockerfile)
-        run: docker build --target test -t computeradminauth-test:${{ github.sha }} -f ComputerAdminAuth/Auth.Host/Dockerfile ComputerAdminAuth
-
-      - name: Extract unit-test artifacts
-        run: |
-          rm -rf ComputerAdminAuth/TestResults
-          docker create --name computeradminauth-test-container computeradminauth-test:${{ github.sha }} >/dev/null
-          docker cp computeradminauth-test-container:/src/TestResults ComputerAdminAuth/TestResults || true
-          docker rm computeradminauth-test-container >/dev/null
-
-      - name: Upload unit-test results
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: admin-test-results
-          path: |
-            ComputerAdminAuth/TestResults/*.trx
-            ComputerAdminAuth/TestResults/Coverage/coverage.cobertura.xml
-          if-no-files-found: warn
-
-      - name: Save test image
-        run: docker save computeradminauth-test:${{ github.sha }} | gzip > computeradminauth-test.tar.gz
-
-      - name: Upload test image tarball
-        uses: actions/upload-artifact@v4
-        with:
-          name: computeradminauth-test-image
-          path: computeradminauth-test.tar.gz
-
-  build-image:
-    name: Build Docker Image
-    needs: test
+  build:
+    name: Build Images
     runs-on: [self-hosted]
     outputs:
-      image-owner: ${{ steps.normalize.outputs.owner }}
+      image-owner: ${{ steps.meta.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download test image
-        uses: actions/download-artifact@v4
-        with:
-          name: computeradminauth-test-image
-          path: /tmp
-
-      - name: Load test image
-        run: docker load < /tmp/computeradminauth-test.tar.gz || true
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Normalize image owner
-        id: normalize
+      - name: Prepare metadata
+        id: meta
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
 
-      - name: Build (and optionally push) image
-        uses: docker/build-push-action@v6
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          context: ComputerAdminAuth
-          file: ComputerAdminAuth/Auth.Host/Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-          cache-from: type=gha
-          tags: |
-            ghcr.io/${{ steps.normalize.outputs.owner }}/computer-admin-auth:${{ github.sha }}
-            ghcr.io/${{ steps.normalize.outputs.owner }}/computer-admin-auth:master
-          cache-to: type=gha,mode=max
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push test image (unit tests)
+        run: |
+          docker build \
+            --target test \
+            -t ghcr.io/${{ steps.meta.outputs.owner }}/computer-admin-auth:${{ github.sha }}-test \
+            -f ComputerAdminAuth/Auth.Host/Dockerfile \
+            ComputerAdminAuth
+          docker push ghcr.io/${{ steps.meta.outputs.owner }}/computer-admin-auth:${{ github.sha }}-test
+
+      - name: Build & push candidate runtime image
+        run: |
+          docker build \
+            --target final \
+            -t ghcr.io/${{ steps.meta.outputs.owner }}/computer-admin-auth:${{ github.sha }}-candidate \
+            -f ComputerAdminAuth/Auth.Host/Dockerfile \
+            ComputerAdminAuth
+          docker push ghcr.io/${{ steps.meta.outputs.owner }}/computer-admin-auth:${{ github.sha }}-candidate
+
+  test:
+    name: Smoke Test (DB connectivity)
+    needs: build
+    runs-on: [self-hosted]
+    environment: ComputerAdminAuth
+    steps:
+      - name: Write runtime environment file
+        run: |
+          if [ -z "${{ secrets.CONNECTIONSTRINGS__DEFAULTCONNECTION }}" ]; then
+            echo "::error::Environment secrets are not configured." >&2
+            exit 1
+          fi
+          cat <<'CONF' > /tmp/computerauthadmin.env
+ASPNETCORE_ENVIRONMENT=${{ secrets.ASPNETCORE_ENVIRONMENT }}
+CONNECTIONSTRINGS__DEFAULTCONNECTION=${{ secrets.CONNECTIONSTRINGS__DEFAULTCONNECTION }}
+TELEGRAM__BOTTOKEN=${{ secrets.TELEGRAM__BOTTOKEN }}
+TELEGRAM__ALLOWEDCLOCKSKEWSECONDS=${{ secrets.TELEGRAM__ALLOWEDCLOCKSKEWSECONDS }}
+OIDC_SVC_REPORTING_SECRET=${{ secrets.OIDC_SVC_REPORTING_SECRET }}
+OIDC_SVC_INTROSPECTOR_SECRET=${{ secrets.OIDC_SVC_INTROSPECTOR_SECRET }}
+OIDC_RESOURCE_SECRET=${{ secrets.OIDC_RESOURCE_SECRET }}
+AUTH_ROOT_PASSWORD=${{ secrets.AUTH_ROOT_PASSWORD }}
+OIDC_SIGNING_CERTIFICATE_PATH=${{ secrets.OIDC_SIGNING_CERTIFICATE_PATH }}
+OIDC_SIGNING_CERTIFICATE_PASSWORD=${{ secrets.OIDC_SIGNING_CERTIFICATE_PASSWORD }}
+DATAPROTECTION__KEYSDIRECTORY=${{ secrets.DATAPROTECTION__KEYSDIRECTORY }}
+CONF
+          chmod 600 /tmp/computerauthadmin.env
+
+      - name: Pull test image
+        run: docker pull ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-test
+
+      - name: Run smoke test
+        env:
+          IMAGE: ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-test
+        run: |
+          docker run --rm \
+            --network data-network \
+            --env-file /tmp/computerauthadmin.env \
+            -e SKIP_DB_TESTS=false \
+            "$IMAGE" \
+            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
 
   deploy:
     name: Deploy
-    needs: build-image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [build, test]
     runs-on: [self-hosted]
+    environment: ComputerAdminAuth
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download test image
-        uses: actions/download-artifact@v4
-        with:
-          name: computeradminauth-test-image
-          path: /tmp
-
-      - name: Load test image
-        run: docker load < /tmp/computeradminauth-test.tar.gz || true
+      - name: Write runtime environment file
+        run: |
+          cat <<'CONF' > /tmp/computerauthadmin.env
+ASPNETCORE_ENVIRONMENT=${{ secrets.ASPNETCORE_ENVIRONMENT }}
+CONNECTIONSTRINGS__DEFAULTCONNECTION=${{ secrets.CONNECTIONSTRINGS__DEFAULTCONNECTION }}
+TELEGRAM__BOTTOKEN=${{ secrets.TELEGRAM__BOTTOKEN }}
+TELEGRAM__ALLOWEDCLOCKSKEWSECONDS=${{ secrets.TELEGRAM__ALLOWEDCLOCKSKEWSECONDS }}
+OIDC_SVC_REPORTING_SECRET=${{ secrets.OIDC_SVC_REPORTING_SECRET }}
+OIDC_SVC_INTROSPECTOR_SECRET=${{ secrets.OIDC_SVC_INTROSPECTOR_SECRET }}
+OIDC_RESOURCE_SECRET=${{ secrets.OIDC_RESOURCE_SECRET }}
+AUTH_ROOT_PASSWORD=${{ secrets.AUTH_ROOT_PASSWORD }}
+OIDC_SIGNING_CERTIFICATE_PATH=${{ secrets.OIDC_SIGNING_CERTIFICATE_PATH }}
+OIDC_SIGNING_CERTIFICATE_PASSWORD=${{ secrets.OIDC_SIGNING_CERTIFICATE_PASSWORD }}
+DATAPROTECTION__KEYSDIRECTORY=${{ secrets.DATAPROTECTION__KEYSDIRECTORY }}
+CONF
+          chmod 600 /tmp/computerauthadmin.env
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -124,31 +130,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull freshly built image
-        run: docker pull ghcr.io/${{ needs.build-image.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}
+      - name: Pull candidate image
+        run: docker pull ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-candidate
 
-      - name: Ensure auth secret file exists
+      - name: Promote tags
         run: |
-          AUTH_ENV_PATH="${HOME}/.config/ava/auth-host.env"
-          mkdir -p "$(dirname "$AUTH_ENV_PATH")"
-          if [ ! -f "$AUTH_ENV_PATH" ]; then
-            echo "::error::Missing required secret file $AUTH_ENV_PATH on deploy host." >&2
-            exit 1
-          fi
-          chmod 600 "$AUTH_ENV_PATH"
-          echo "AUTH_ENV_PATH=$AUTH_ENV_PATH" >> "$GITHUB_ENV"
-
-      - name: Database connectivity smoke test (data-network)
-        run: |
-          docker run --rm \
-            --network data-network \
-            --env-file "${HOME}/.config/ava/auth-host.env" \
-            computeradminauth-test:${{ github.sha }} \
-            dotnet test Auth.Tests/Auth.Tests.csproj --configuration Release --no-restore --filter "Category=DatabaseConnectivity"
+          docker tag ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-candidate ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}
+          docker tag ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-candidate ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:master
+          docker push ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}
+          docker push ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:master
 
       - name: Deploy via docker compose
         env:
-          AUTH_IMAGE: ghcr.io/${{ needs.build-image.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}
-          AUTH_ENV_FILE: ${{ env.AUTH_ENV_PATH }}
+          AUTH_IMAGE: ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}
+          AUTH_ENV_FILE: /tmp/computerauthadmin.env
         run: |
           docker compose -f ComputerAdminAuth/docker-compose.yml up -d --no-build auth

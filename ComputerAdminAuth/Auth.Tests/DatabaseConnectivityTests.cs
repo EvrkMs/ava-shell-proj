@@ -20,7 +20,9 @@ public class DatabaseConnectivityTests
             return; // deliberately skip when instructed
         }
 
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        var connectionString =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") ??
+            Environment.GetEnvironmentVariable("CONNECTIONSTRINGS__DEFAULTCONNECTION");
         Assert.False(string.IsNullOrWhiteSpace(connectionString),
             "Environment variable 'ConnectionStrings__DefaultConnection' must be provided for connectivity tests.");
 
