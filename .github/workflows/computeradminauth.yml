@@ -20,7 +20,7 @@ permissions:
 jobs:
   test:
     name: Test & Coverage
-    runs-on: [self-hosted, ava-vm]
+    runs-on: [self-hosted, Linux, X64]
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -92,7 +92,7 @@ jobs:
   build-image:
     name: Build Docker Image
     needs: test
-    runs-on: [self-hosted, ava-vm]
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 

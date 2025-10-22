@@ -20,7 +20,7 @@ permissions:
 jobs:
   build:
     name: Install, Lint & Build
-    runs-on: [self-hosted, ava-vm]
+    runs-on: [self-hosted, Linux, X64]
     env:
       CI: true
     steps:
@@ -55,7 +55,7 @@ jobs:
   build-image:
     name: Build Docker Image
     needs: build
-    runs-on: [self-hosted, ava-vm]
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
 
