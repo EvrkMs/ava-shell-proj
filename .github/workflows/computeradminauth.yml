@@ -136,16 +136,19 @@ jobs:
       - name: Apply EF Core migrations
         run: |
           docker run --rm \
+            --user $(id -u):$(id -g) \
             --network data-network \
             --env-file /tmp/computerauthadmin.env \
             -v "$PWD/ComputerAdminAuth":/src \
             -w /src \
             mcr.microsoft.com/dotnet/sdk:9.0 \
-            sh -c "dotnet tool install --global dotnet-ef --version 9.0.8 \
-                  && export PATH=\$PATH:/root/.dotnet/tools \
-                  && dotnet ef database update --project Auth.EntityFramework/Auth.EntityFramework.csproj \
-                                                --startup-project Auth.Host/Auth.Host.csproj \
-                                                --no-build"
+            sh -c "dotnet restore Auth.Host/Auth.Host.csproj --nologo \
+                   && dotnet tool install --tool-path /tmp/dotnet-tools dotnet-ef --version 9.0.8 \
+                   && export PATH=/tmp/dotnet-tools:\$PATH \
+                   && dotnet ef database update \
+                          --project Auth.EntityFramework/Auth.EntityFramework.csproj \
+                          --startup-project Auth.Host/Auth.Host.csproj \
+                          --no-build"
 
 
       - name: Promote tags
