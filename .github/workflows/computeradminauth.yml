@@ -133,6 +133,16 @@ jobs:
       - name: Pull candidate image
         run: docker pull ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-candidate
 
+      - name: Apply EF Core migrations
+        run: |
+          docker run --rm \
+            --network data-network \
+            --env-file /tmp/computerauthadmin.env \
+            -v "$PWD/ComputerAdminAuth":/src \
+            -w /src \
+            mcr.microsoft.com/dotnet/sdk:9.0 \
+            sh -c "dotnet restore Auth.Host/Auth.Host.csproj --nologo && dotnet ef database update --project Auth.EntityFramework/Auth.EntityFramework.csproj --startup-project Auth.Host/Auth.Host.csproj --no-build"
+
       - name: Promote tags
         run: |
           docker tag ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}-candidate ghcr.io/${{ needs.build.outputs.image-owner }}/computer-admin-auth:${{ github.sha }}
