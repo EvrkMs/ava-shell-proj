@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Auth.EntityFramework.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251022174815_AddSessionSecurityColumns")]
-    partial class AddSessionSecurityColumns
+    [Migration("20251024003934_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -65,8 +65,7 @@ namespace Auth.EntityFramework.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_TelegramEntities_UserId");
+                        .IsUnique();
 
                     b.ToTable("TelegramEntities");
                 });
@@ -289,8 +288,7 @@ namespace Auth.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("IX_AspNetRoleClaims_RoleId");
+                    b.HasIndex("RoleId");
 
                     b.ToTable("AspNetRoleClaims", (string)null);
                 });
@@ -314,8 +312,7 @@ namespace Auth.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_AspNetUserClaims_UserId");
+                    b.HasIndex("UserId");
 
                     b.ToTable("AspNetUserClaims", (string)null);
                 });
@@ -336,8 +333,7 @@ namespace Auth.EntityFramework.Migrations
 
                     b.HasKey("LoginProvider", "ProviderKey");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_AspNetUserLogins_UserId");
+                    b.HasIndex("UserId");
 
                     b.ToTable("AspNetUserLogins", (string)null);
                 });
@@ -352,8 +348,7 @@ namespace Auth.EntityFramework.Migrations
 
                     b.HasKey("UserId", "RoleId");
 
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("IX_AspNetUserRoles_RoleId");
+                    b.HasIndex("RoleId");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_AspNetUserRoles_UserId");
@@ -587,8 +582,7 @@ namespace Auth.EntityFramework.Migrations
                     b.HasIndex("ApplicationId")
                         .HasDatabaseName("IX_OpenIddictTokens_ApplicationId");
 
-                    b.HasIndex("AuthorizationId")
-                        .HasDatabaseName("IX_OpenIddictTokens_AuthorizationId");
+                    b.HasIndex("AuthorizationId");
 
                     b.HasIndex("ReferenceId")
                         .IsUnique();

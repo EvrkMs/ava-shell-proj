@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
@@ -6,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Auth.EntityFramework.Migrations
 {
     /// <inheritdoc />
-    public partial class Init : Migration
+    public partial class init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -105,6 +106,11 @@ namespace Auth.EntityFramework.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ReferenceId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    SecretHash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    SecretSalt = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    SecretCreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    SecretExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     ClientId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     Device = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
@@ -339,6 +345,11 @@ namespace Auth.EntityFramework.Migrations
                 column: "RoleId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserRoles_UserId",
+                table: "AspNetUserRoles",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "EmailIndex",
                 table: "AspNetUsers",
                 column: "NormalizedEmail");
@@ -350,10 +361,20 @@ namespace Auth.EntityFramework.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserTokens_UserId",
+                table: "AspNetUserTokens",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_OpenIddictApplications_ClientId",
                 table: "OpenIddictApplications",
                 column: "ClientId",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OpenIddictAuthorizations_ApplicationId",
+                table: "OpenIddictAuthorizations",
+                column: "ApplicationId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OpenIddictAuthorizations_ApplicationId_Status_Subject_Type",
@@ -365,6 +386,11 @@ namespace Auth.EntityFramework.Migrations
                 table: "OpenIddictScopes",
                 column: "Name",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OpenIddictTokens_ApplicationId",
+                table: "OpenIddictTokens",
+                column: "ApplicationId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OpenIddictTokens_ApplicationId_Status_Subject_Type",
@@ -408,6 +434,12 @@ namespace Auth.EntityFramework.Migrations
                 name: "IX_user_sessions_CreatedAt",
                 table: "user_sessions",
                 column: "CreatedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_user_sessions_ReferenceId",
+                table: "user_sessions",
+                column: "ReferenceId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_user_sessions_UserId_Revoked",
