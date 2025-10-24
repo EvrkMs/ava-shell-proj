@@ -242,7 +242,7 @@ app.MapGet("/healthz", () => Results.Ok("ok"));
 using (var scope = app.Services.CreateScope())
 {
     var sp = scope.ServiceProvider;
-    await sp.ApplyMigrationsAndSeedAsync();
+    await sp.ApplyMigrationsAndSeedAsync(app.Lifetime.ApplicationStopping);
 }
 
 app.Run();
