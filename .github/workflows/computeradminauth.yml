@@ -24,6 +24,14 @@ jobs:
     outputs:
       image-owner: ${{ steps.meta.outputs.owner }}
     steps:
+      - name: Cleanup workspace
+        run: |
+          docker run --rm \
+            -e HOST_UID=$(id -u) \
+            -e HOST_GID=$(id -g) \
+            -v "$PWD":/workspace \
+            alpine sh -c "chown -R \"\$HOST_UID\":\"\$HOST_GID\" /workspace || true; find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} \;"
+
       - uses: actions/checkout@v4
 
       - name: Prepare metadata
@@ -63,6 +71,16 @@ jobs:
     runs-on: [self-hosted]
     environment: ComputerAdminAuth
     steps:
+      - name: Cleanup workspace
+        run: |
+          docker run --rm \
+            -e HOST_UID=$(id -u) \
+            -e HOST_GID=$(id -g) \
+            -v "$PWD":/workspace \
+            alpine sh -c "chown -R \"\$HOST_UID\":\"\$HOST_GID\" /workspace || true; find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} \;"
+
+      - uses: actions/checkout@v4
+
       - name: Write runtime environment file
         run: |
           if [ -z "${{ secrets.CONNECTIONSTRINGS__DEFAULTCONNECTION }}" ]; then
@@ -104,6 +122,14 @@ jobs:
     runs-on: [self-hosted]
     environment: ComputerAdminAuth
     steps:
+      - name: Cleanup workspace
+        run: |
+          docker run --rm \
+            -e HOST_UID=$(id -u) \
+            -e HOST_GID=$(id -g) \
+            -v "$PWD":/workspace \
+            alpine sh -c "chown -R \"\$HOST_UID\":\"\$HOST_GID\" /workspace || true; find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} \;"
+
       - uses: actions/checkout@v4
 
       - name: Write runtime environment file
@@ -147,8 +173,7 @@ jobs:
                    && export PATH=/tmp/dotnet-tools:\$PATH \
                    && dotnet ef database update \
                           --project Auth.EntityFramework/Auth.EntityFramework.csproj \
-                          --startup-project Auth.Host/Auth.Host.csproj \
-                          --no-build"
+                          --startup-project Auth.Host/Auth.Host.csproj"
 
 
       - name: Promote tags
