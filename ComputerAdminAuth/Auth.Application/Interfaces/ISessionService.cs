@@ -28,5 +28,5 @@ public interface ISessionService
     Task<SessionValidationResult?> ValidateBrowserSessionAsync(string referenceId, string secret, bool requireActive = true, CancellationToken ct = default);
 }
 
-public readonly record struct SessionIssueResult(string ReferenceId, string BrowserSecret);
-public readonly record struct SessionValidationResult(Guid SessionId, Guid UserId, DateTime? ExpiresAt, bool Revoked);
+public readonly record struct SessionIssueResult(string ReferenceId, string BrowserSecret, DateTime CreatedAt, DateTime? ExpiresAt);
+public readonly record struct SessionValidationResult(Guid SessionId, Guid UserId, DateTime CreatedAt, DateTime? ExpiresAt, bool Revoked);

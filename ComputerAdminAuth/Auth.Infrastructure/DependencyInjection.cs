@@ -80,6 +80,9 @@ public static class DependencyInjection
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
 
+        services.AddScoped<CustomSignInManager>();
+        services.AddScoped<SignInManager<UserEntity>>(sp => sp.GetRequiredService<CustomSignInManager>());
+
         services.ConfigureApplicationCookie(options =>
         {
             options.LoginPath = "/Account/Login";
@@ -209,8 +212,6 @@ public static class DependencyInjection
         // === Репозитории и сервисы ===
         services.AddScoped<ITelegramRepository, TelegramRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
-
-        services.AddTransient<CustomSignInManager>();
 
         return services;
     }

@@ -122,7 +122,7 @@ namespace Auth.Host.Pages.Account.Telegram
             await _unitOfWork.SaveChangesAsync(ct);
 
             // 6) Вход
-            await _signInManager.SignInAsync(user, isPersistent: true);
+            await _signInManager.SignInWithSessionPolicyAsync(user, rememberMe: true);
 
             var targetUrl = SafeReturn(q.ReturnUrl);
             _log.LogInformation("TelegramLogin: success for user {userId}, redirecting to {url}", user.Id, targetUrl);

@@ -1,4 +1,5 @@
 using Auth.Domain.Entities;
+using Auth.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -11,11 +12,11 @@ namespace Auth.Host.Pages.Account
     public class ChangePasswordModel : PageModel
     {
         private readonly UserManager<UserEntity> _userManager;
-        private readonly SignInManager<UserEntity> _signInManager;
+        private readonly CustomSignInManager _signInManager;
 
         public ChangePasswordModel(
             UserManager<UserEntity> userManager,
-            SignInManager<UserEntity> signInManager)
+            CustomSignInManager signInManager)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -92,7 +93,7 @@ namespace Auth.Host.Pages.Account
             }
 
             // Перелогиним и отправим по безопасному ReturnUrl
-            await _signInManager.SignInAsync(user, isPersistent: false);
+            await _signInManager.SignInWithSessionPolicyAsync(user, rememberMe: false);
             var safeReturn = (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
                 ? ReturnUrl!
                 : "/";
@@ -100,4 +101,3 @@ namespace Auth.Host.Pages.Account
         }
     }
 }
-

@@ -57,7 +57,7 @@ public class SessionService : ISessionService
             SecretCreatedAt = DateTime.UtcNow
         };
         var created = await _repo.AddAsync(session, ct);
-        return new SessionIssueResult(created.ReferenceId, browserSecret);
+        return new SessionIssueResult(created.ReferenceId, browserSecret, created.CreatedAt, created.ExpiresAt);
     }
 
     public async Task<SessionIssueResult?> RefreshBrowserSecretAsync(string referenceId, CancellationToken ct = default)
@@ -73,7 +73,7 @@ public class SessionService : ISessionService
         session.SecretExpiresAt = null;
         session.LastSeenAt = DateTime.UtcNow;
         await _repo.UpdateAsync(session, ct);
-        return new SessionIssueResult(session.ReferenceId, newSecret);
+        return new SessionIssueResult(session.ReferenceId, newSecret, session.CreatedAt, session.ExpiresAt);
     }
 
     public async Task<bool> RevokeAsync(string referenceId, string? reason = null, string? by = null, CancellationToken ct = default)
@@ -122,7 +122,7 @@ public class SessionService : ISessionService
         if (requireActive && (session.Revoked || (session.ExpiresAt is not null && session.ExpiresAt <= DateTime.UtcNow)))
             return null;
 
-        return new SessionValidationResult(session.Id, session.UserId, session.ExpiresAt, session.Revoked);
+        return new SessionValidationResult(session.Id, session.UserId, session.CreatedAt, session.ExpiresAt, session.Revoked);
     }
 
     private static string? Trunc(string? val, int max)

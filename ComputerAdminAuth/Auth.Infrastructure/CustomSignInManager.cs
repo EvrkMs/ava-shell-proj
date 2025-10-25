@@ -9,6 +9,10 @@ namespace Auth.Infrastructure;
 
 public class CustomSignInManager : SignInManager<UserEntity>
 {
+    public const string RememberMePropertyKey = "auth.remember_me";
+    public static readonly TimeSpan ShortSessionLifetime = TimeSpan.FromDays(1);
+    public static readonly TimeSpan LongSessionLifetime = TimeSpan.FromDays(7);
+
     public CustomSignInManager(UserManager<UserEntity> userManager,
         IHttpContextAccessor contextAccessor, IUserClaimsPrincipalFactory<UserEntity> claimsFactory,
         IOptions<IdentityOptions> optionsAccessor, ILogger<SignInManager<UserEntity>> logger,
@@ -19,12 +23,38 @@ public class CustomSignInManager : SignInManager<UserEntity>
         string userName, string password, bool isPersistent, bool lockoutOnFailure)
     {
         var user = await UserManager.FindByNameAsync(userName);
-        if (user != null && user.MustChangePassword)
+        if (user is not null && user.MustChangePassword)
         {
             return SignInResult.NotAllowed; // вместо успешного логина
         }
 
-        return await base.PasswordSignInAsync(userName, password, isPersistent, lockoutOnFailure);
+        var result = await base.PasswordSignInAsync(userName, password, isPersistent, lockoutOnFailure);
+
+        if (result.Succeeded && user is not null)
+        {
+            await SignInWithSessionPolicyAsync(user, rememberMe: isPersistent);
+        }
+
+        return result;
+    }
+
+    public Task SignInWithSessionPolicyAsync(UserEntity user, bool rememberMe)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        var props = BuildAuthenticationProperties(rememberMe);
+        return SignInAsync(user, props);
+    }
+
+    private static AuthenticationProperties BuildAuthenticationProperties(bool rememberMe)
+    {
+        var props = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            AllowRefresh = rememberMe,
+            IssuedUtc = DateTimeOffset.UtcNow,
+            ExpiresUtc = DateTimeOffset.UtcNow + (rememberMe ? LongSessionLifetime : ShortSessionLifetime)
+        };
+        props.Items[RememberMePropertyKey] = rememberMe ? "true" : "false";
+        return props;
     }
 }
-

@@ -2,6 +2,7 @@ using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
 using Auth.Host.Extensions;
 using Auth.Host.Services.Support;
+using Auth.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -57,17 +58,28 @@ public sealed class SessionBindingService
 
     public async Task AttachInteractiveSessionAsync(HttpContext http, ClaimsPrincipal principal, UserEntity user, string? clientId)
     {
+        var cookieAuth = await http.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        var rememberMe = ResolveRememberMe(cookieAuth);
+        var lifetime = rememberMe ? CustomSignInManager.LongSessionLifetime : CustomSignInManager.ShortSessionLifetime;
+
         // Prefer client IP resolved via forwarded headers; fallback to proxy headers for display only
         var ip = http.GetRealClientIp();
         var ua = http.Request.Headers["User-Agent"].ToString();
         var device = "web";
-        var issued = await _sessions.EnsureInteractiveSessionAsync(user.Id, clientId, ip, ua, device, TimeSpan.FromDays(30));
+        var issued = await _sessions.EnsureInteractiveSessionAsync(user.Id, clientId, ip, ua, device, lifetime);
         var sid = issued.ReferenceId;
 
         var ci = (ClaimsIdentity)principal.Identity!;
         var sidClaim = new Claim("sid", sid);
         ci.AddClaim(sidClaim);
         sidClaim.SetDestinations(
+            OpenIddictConstants.Destinations.IdentityToken,
+            OpenIddictConstants.Destinations.AccessToken);
+        var existingPrincipalPersistence = ci.FindFirst(SessionClaimTypes.Persistence);
+        if (existingPrincipalPersistence is not null) ci.RemoveClaim(existingPrincipalPersistence);
+        var persistenceClaim = new Claim(SessionClaimTypes.Persistence, rememberMe ? "true" : "false");
+        ci.AddClaim(persistenceClaim);
+        persistenceClaim.SetDestinations(
             OpenIddictConstants.Destinations.IdentityToken,
             OpenIddictConstants.Destinations.AccessToken);
 
@@ -77,18 +89,20 @@ public sealed class SessionBindingService
             Secure = true,
             SameSite = SameSiteMode.Lax,
             IsEssential = true,
-            Expires = DateTimeOffset.UtcNow.AddDays(30)
+            Expires = DateTimeOffset.UtcNow.Add(lifetime)
         };
         http.Response.Cookies.Append(SessionCookie.Name, SessionCookie.Pack(sid, issued.BrowserSecret), cookieOptions);
 
         // Stamp the Identity cookie with sid so silent login is session-bound
-        var cookieAuth = await http.AuthenticateAsync(IdentityConstants.ApplicationScheme);
         if (cookieAuth?.Succeeded == true && cookieAuth.Principal?.Identity is ClaimsIdentity idCookie)
         {
             var existingSid = idCookie.FindFirst("sid");
             if (existingSid is not null) idCookie.RemoveClaim(existingSid);
             idCookie.AddClaim(new Claim("sid", sid));
-            await http.SignInAsync(IdentityConstants.ApplicationScheme, cookieAuth.Principal);
+            var existingPersistence = idCookie.FindFirst(SessionClaimTypes.Persistence);
+            if (existingPersistence is not null) idCookie.RemoveClaim(existingPersistence);
+            idCookie.AddClaim(new Claim(SessionClaimTypes.Persistence, rememberMe ? "true" : "false"));
+            await http.SignInAsync(IdentityConstants.ApplicationScheme, cookieAuth.Principal, cookieAuth.Properties);
         }
     }
 
@@ -119,5 +133,17 @@ public sealed class SessionBindingService
             RedirectUri = http.Request.PathBase + http.Request.Path + QueryString.Create(parameters)
         };
         return new GuardResult(false, new ChallengeResult(new[] { IdentityConstants.ApplicationScheme }, chProps));
+    }
+
+    private static bool ResolveRememberMe(AuthenticateResult? cookieAuth)
+    {
+        if (cookieAuth?.Properties?.Items is { } items &&
+            items.TryGetValue(CustomSignInManager.RememberMePropertyKey, out var raw) &&
+            bool.TryParse(raw, out var rememberMe))
+        {
+            return rememberMe;
+        }
+
+        return cookieAuth?.Properties?.IsPersistent ?? true;
     }
 }

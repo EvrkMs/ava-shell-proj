@@ -62,6 +62,8 @@ public sealed class SessionServiceTests : IDisposable
 
         Assert.Equal(32, issued.ReferenceId.Length);
         Assert.False(string.IsNullOrWhiteSpace(issued.BrowserSecret));
+        Assert.NotEqual(default, issued.CreatedAt);
+        Assert.NotNull(issued.ExpiresAt);
 
         var stored = await _repository.GetByReferenceAsync(issued.ReferenceId);
         Assert.NotNull(stored);
@@ -78,6 +80,8 @@ public sealed class SessionServiceTests : IDisposable
         var rotated = await _service.RefreshBrowserSecretAsync(issued.ReferenceId);
         Assert.NotNull(rotated);
         Assert.NotEqual(issued.BrowserSecret, rotated!.Value.BrowserSecret);
+        Assert.Equal(issued.CreatedAt, rotated.Value.CreatedAt);
+        Assert.Equal(issued.ExpiresAt, rotated.Value.ExpiresAt);
 
         Assert.Null(await _service.ValidateBrowserSessionAsync(issued.ReferenceId, issued.BrowserSecret));
         Assert.True((await _service.ValidateBrowserSessionAsync(issued.ReferenceId, rotated.Value.BrowserSecret)).HasValue);

@@ -1,6 +1,7 @@
 ﻿// Auth.Host\Controllers\AuthorizationController.cs
 using Auth.Application.Interfaces;
 using Auth.Domain.Entities;
+using Auth.Infrastructure;
 using Auth.Host.ProfileService; // IOpenIddictProfileService
 using Auth.Host.Services;
 using Auth.Host.Services.Support;
@@ -22,7 +23,7 @@ public class AuthorizationController : ControllerBase
 {
     private readonly IOpenIddictApplicationManager _applicationManager;
     private readonly IOpenIddictAuthorizationManager _authorizationManager;
-    private readonly SignInManager<UserEntity> _signInManager;
+    private readonly CustomSignInManager _signInManager;
     private readonly UserManager<UserEntity> _userManager;
     private readonly IOpenIddictProfileService _profile;
     private readonly ISessionService _sessions;
@@ -31,7 +32,7 @@ public class AuthorizationController : ControllerBase
     public AuthorizationController(
         IOpenIddictApplicationManager applicationManager,
         IOpenIddictAuthorizationManager authorizationManager,
-        SignInManager<UserEntity> signInManager,
+        CustomSignInManager signInManager,
         UserManager<UserEntity> userManager,
         IOpenIddictProfileService profile,
         ISessionService sessions,
@@ -72,8 +73,16 @@ public class AuthorizationController : ControllerBase
             }
         }
 
-        // Если пользователь не залогинен - отправляем на страницу логина
+        // Если пользователь не залогинен - пробуем восстановить сессию по sid и только потом отправляем на логин
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        if (!result.Succeeded)
+        {
+            if (await TryRestoreIdentityFromSessionCookieAsync())
+            {
+                result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+            }
+        }
+
         if (!result.Succeeded)
         {
             // Если prompt=none, возвращаем ошибку без редиректа
@@ -276,28 +285,33 @@ public class AuthorizationController : ControllerBase
                 sidClaim.SetDestinations(
                     OpenIddictConstants.Destinations.IdentityToken,
                     OpenIddictConstants.Destinations.AccessToken);
-                var renewed = await _sessions.RefreshBrowserSecretAsync(sid);
-                if (renewed is null)
-                {
-                    return Forbid(
-                        authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                        properties: new AuthenticationProperties(new Dictionary<string, string?>
-                        {
-                            [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
-                            [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The session has been revoked."
-                        }));
-                }
+                var persistedValue = result.Principal!.GetClaim(SessionClaimTypes.Persistence);
+                var isPersistentSession = ParsePersistenceClaim(persistedValue);
+                var persistenceClaim = new Claim(SessionClaimTypes.Persistence, isPersistentSession ? "true" : "false");
+                ci.AddClaim(persistenceClaim);
+                persistenceClaim.SetDestinations(
+                    OpenIddictConstants.Destinations.IdentityToken,
+                    OpenIddictConstants.Destinations.AccessToken);
 
-                // Refresh sid cookie lifetime on token exchange
-                var cookieOptions = new CookieOptions
+                if (isPersistentSession)
                 {
-                    HttpOnly = true,
-                    Secure = true,
-                    SameSite = SameSiteMode.Lax,
-                    IsEssential = true,
-                    Expires = DateTimeOffset.UtcNow.AddDays(30)
-                };
-                Response.Cookies.Append(SessionCookie.Name, SessionCookie.Pack(renewed.Value.ReferenceId, renewed.Value.BrowserSecret), cookieOptions);
+                    var renewed = await _sessions.RefreshBrowserSecretAsync(sid);
+                    if (renewed is null)
+                    {
+                        return Forbid(
+                            authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                            properties: new AuthenticationProperties(new Dictionary<string, string?>
+                            {
+                                [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The session has been revoked."
+                            }));
+                    }
+
+                    Response.Cookies.Append(
+                        SessionCookie.Name,
+                        SessionCookie.Pack(renewed.Value.ReferenceId, renewed.Value.BrowserSecret),
+                        CreateSessionCookieOptions(CustomSignInManager.LongSessionLifetime));
+                }
             }
 
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -448,6 +462,54 @@ public class AuthorizationController : ControllerBase
 
         return authorizationId;
     }
+
+    private async Task<bool> TryRestoreIdentityFromSessionCookieAsync()
+    {
+        if (!Request.Cookies.TryGetValue(SessionCookie.Name, out var rawSid) ||
+            !SessionCookie.TryUnpack(rawSid, out var reference, out var secret))
+        {
+            return false;
+        }
+
+        var validation = await _sessions.ValidateBrowserSessionAsync(reference, secret, requireActive: true);
+        if (validation is null)
+        {
+            DeleteSidCookie(SameSiteMode.Lax);
+            await _signInManager.SignOutAsync();
+            return false;
+        }
+
+        var user = await _userManager.FindByIdAsync(validation.Value.UserId.ToString());
+        if (user is null || !user.IsActive)
+        {
+            await _sessions.RevokeAsync(reference, reason: "user_missing_or_inactive");
+            DeleteSidCookie(SameSiteMode.Lax);
+            return false;
+        }
+
+        var rememberMe = DeterminePersistence(validation.Value);
+        await _signInManager.SignInWithSessionPolicyAsync(user, rememberMe);
+        return true;
+    }
+
+    private static bool DeterminePersistence(SessionValidationResult validation)
+    {
+        if (validation.ExpiresAt is null) return true;
+        var duration = validation.ExpiresAt.Value - validation.CreatedAt;
+        return duration >= CustomSignInManager.LongSessionLifetime - TimeSpan.FromMinutes(1);
+    }
+
+    private static bool ParsePersistenceClaim(string? value)
+        => bool.TryParse(value, out var parsed) ? parsed : true;
+
+    private static CookieOptions CreateSessionCookieOptions(TimeSpan lifetime) => new()
+    {
+        HttpOnly = true,
+        Secure = true,
+        SameSite = SameSiteMode.Lax,
+        IsEssential = true,
+        Expires = DateTimeOffset.UtcNow.Add(lifetime)
+    };
 
     private void DeleteSidCookie(SameSiteMode sameSiteMode)
     {
