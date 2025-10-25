@@ -123,9 +123,6 @@ const Users: React.FC = () => {
   const listError = loadError ? (loadError?.response?.data ?? loadError?.message ?? "Ошибка загрузки") : null;
   const roles = rolesQuery.data ?? [];
 
-  const cBusy = createUserMutation.isPending;
-  const pBusy = changePasswordMutation.isPending;
-
   const filteredText = useMemo(() => {
     const parts: string[] = [];
     if (query.trim()) parts.push(`поиск="${query.trim()}"`);
@@ -195,6 +192,9 @@ const Users: React.FC = () => {
     },
     onError: (err: any) => setPError(err?.response?.data ?? err?.message ?? "Ошибка смены пароля"),
   });
+
+  const cBusy = createUserMutation.isPending;
+  const pBusy = changePasswordMutation.isPending;
 
   const submitCreate = async () => {
     // простая фронт-валидация
