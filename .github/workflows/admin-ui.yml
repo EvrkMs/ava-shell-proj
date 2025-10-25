@@ -50,8 +50,8 @@ jobs:
         run: |
           docker rm -f admin-ui-smoke >/dev/null 2>&1 || true
           docker run -d --rm --name admin-ui-smoke -p 5080:5000 admin-ui:${{ github.sha }}
-          for i in $(seq 1 10); do
-            if curl -fsS http://localhost:5080 >/dev/null; then
+          for i in $(seq 1 15); do
+            if curl -kfsS https://localhost:5080/ui-healthz >/dev/null; then
               ok=1
               break
             fi
