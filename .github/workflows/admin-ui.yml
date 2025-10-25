@@ -116,3 +116,12 @@ jobs:
           UI_IMAGE: ghcr.io/${{ needs.build-test.outputs.image-owner }}/admin-ui:${{ github.sha }}
         run: |
           docker compose -f UI/docker-compose.yml up -d --no-build admin-ui
+
+  cleanup:
+    name: Cleanup Runner Docker Images
+    needs: deploy
+    if: ${{ always() }}
+    runs-on: [self-hosted]
+    steps:
+      - name: Remove unused Docker images
+        run: docker image prune --all --force

@@ -224,3 +224,12 @@ jobs:
           AUTH_ENV_FILE: /tmp/computerauthadmin.env
         run: |
           docker compose -f ComputerAdminAuth/docker-compose.yml up -d --no-build auth
+
+  cleanup:
+    name: Cleanup Runner Docker Images
+    needs: deploy
+    if: ${{ always() }}
+    runs-on: [self-hosted]
+    steps:
+      - name: Remove unused Docker images
+        run: docker image prune --all --force
