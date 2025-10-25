@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Auth.Infrastructure\Auth.Infrastructure.csproj" />
+    <ProjectReference Include="..\Auth.Host\Auth.Host.csproj" />
   </ItemGroup>
 
 </Project>

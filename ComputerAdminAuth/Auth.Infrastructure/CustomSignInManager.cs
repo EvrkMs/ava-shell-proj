@@ -38,7 +38,7 @@ public class CustomSignInManager : SignInManager<UserEntity>
         return result;
     }
 
-    public Task SignInWithSessionPolicyAsync(UserEntity user, bool rememberMe)
+    public virtual Task SignInWithSessionPolicyAsync(UserEntity user, bool rememberMe)
     {
         ArgumentNullException.ThrowIfNull(user);
         var props = BuildAuthenticationProperties(rememberMe);

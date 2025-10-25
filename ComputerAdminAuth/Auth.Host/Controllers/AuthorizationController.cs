@@ -463,7 +463,7 @@ public class AuthorizationController : ControllerBase
         return authorizationId;
     }
 
-    private async Task<bool> TryRestoreIdentityFromSessionCookieAsync()
+    internal async Task<bool> TryRestoreIdentityFromSessionCookieAsync()
     {
         if (!Request.Cookies.TryGetValue(SessionCookie.Name, out var rawSid) ||
             !SessionCookie.TryUnpack(rawSid, out var reference, out var secret))

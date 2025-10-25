@@ -95,6 +95,30 @@ public sealed class SessionServiceTests : IDisposable
         Assert.Null(await _service.ValidateBrowserSessionAsync(issued.ReferenceId, rotated.Value.BrowserSecret));
     }
 
+    [Fact]
+    public async Task ValidateBrowserSessionAsync_RespectsRequireActiveFlag()
+    {
+        var issued = await _service.EnsureInteractiveSessionAsync(
+            Guid.NewGuid(),
+            clientId: "test-client",
+            ip: "127.0.0.1",
+            userAgent: "testsuite",
+            device: "unit-test",
+            absoluteLifetime: TimeSpan.FromMinutes(10));
+
+        var stored = await _repository.GetByReferenceAsync(issued.ReferenceId);
+        Assert.NotNull(stored);
+        stored!.ExpiresAt = DateTime.UtcNow.AddMinutes(-5);
+        await _repository.UpdateAsync(stored);
+
+        var strict = await _service.ValidateBrowserSessionAsync(issued.ReferenceId, issued.BrowserSecret);
+        Assert.Null(strict);
+
+        var relaxed = await _service.ValidateBrowserSessionAsync(issued.ReferenceId, issued.BrowserSecret, requireActive: false);
+        Assert.True(relaxed.HasValue);
+        Assert.Equal(stored.Id, relaxed!.Value.SessionId);
+    }
+
     private static IAsyncEnumerable<object> EmptyTokens()
     {
         return Inner();
