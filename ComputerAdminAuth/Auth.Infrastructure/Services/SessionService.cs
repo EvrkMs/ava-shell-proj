@@ -60,15 +60,6 @@ public class SessionService : ISessionService
         return new SessionIssueResult(created.ReferenceId, browserSecret);
     }
 
-    public async Task<bool> TouchAsync(string referenceId, CancellationToken ct = default)
-    {
-        var s = await _repo.GetActiveByReferenceAsync(referenceId, ct);
-        if (s is null) return false;
-        s.LastSeenAt = DateTime.UtcNow;
-        await _repo.UpdateAsync(s, ct);
-        return true;
-    }
-
     public async Task<SessionIssueResult?> RefreshBrowserSecretAsync(string referenceId, CancellationToken ct = default)
     {
         var session = await _repo.GetActiveByReferenceAsync(referenceId, ct);

@@ -16,7 +16,6 @@ public interface ISessionService
         TimeSpan? absoluteLifetime,
         CancellationToken ct = default);
 
-    Task<bool> TouchAsync(string referenceId, CancellationToken ct = default);
     Task<bool> RevokeAsync(string referenceId, string? reason = null, string? by = null, CancellationToken ct = default);
     Task<bool> IsActiveAsync(string referenceId, CancellationToken ct = default);
     Task<bool> LinkAuthorizationAsync(string referenceId, string authorizationId, CancellationToken ct = default);

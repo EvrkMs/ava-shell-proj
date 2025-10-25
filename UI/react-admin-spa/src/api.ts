@@ -6,10 +6,7 @@ export const api = axios.create({
   baseURL: ENV.API_BASE,
   withCredentials: false,
 });
-export const apiValid = axios.create({
-  baseURL: "https://cheack.ava-kk.ru",
-  withCredentials: false,
-});
+
 export function setAuthToken(token?: string) {
   if (token) {
     api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
@@ -25,18 +22,16 @@ api.interceptors.response.use(
     try {
       const status = error?.response?.status;
       if (status === 401) {
-        try { await userManager.removeUser(); } catch {}
-        // Force reload to clear in-memory state and kick login if needed
+        try {
+          await userManager.removeUser();
+        } catch {
+          // ignore cleanup issues, browser reload clears state anyway
+        }
         window.location.replace("/");
       }
-    } catch {}
+    } catch {
+      // ignore secondary failures
+    }
     return Promise.reject(error);
   }
 );
-export async function validateToken(token?: string) {
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await apiValid.get("/api/users", { headers }); // токен уходит в этом запросе
-  return res.data as { sub?: string; scopes?: string | string[]; roles?: string[] };
-}

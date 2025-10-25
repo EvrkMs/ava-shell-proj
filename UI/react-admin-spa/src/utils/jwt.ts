@@ -33,18 +33,3 @@ export function rolesFromClaims(claims?: Record<string, any>): string[] {
   const roles = sources.flatMap(ensureStringArray).map(r => r.trim()).filter(Boolean);
   return Array.from(new Set(roles));
 }
-
-export function getRolesFromToken(token?: string): string[] {
-  const claims = decodeJwtClaims(token);
-  return rolesFromClaims(claims);
-}
-
-export function hasRole(token: string | undefined, role: string): boolean {
-  const roles = getRolesFromToken(token).map(r => r.toLowerCase());
-  return roles.includes(role.toLowerCase());
-}
-
-export function hasRootRole(token?: string): boolean {
-  return hasRole(token, "root");
-}
-

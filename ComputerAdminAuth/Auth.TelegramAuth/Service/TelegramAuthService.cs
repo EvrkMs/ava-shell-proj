@@ -49,58 +49,6 @@ public sealed class TelegramAuthService : ITelegramAuthService
     }
 
     // ===== WebApp initData =====
-
-    public bool TryParseInitData(string initData, out Dictionary<string, string> data, out string hash, out string? error)
-    {
-        data = new(StringComparer.Ordinal);
-        hash = string.Empty;
-        error = null;
-
-        if (string.IsNullOrWhiteSpace(initData)) { error = "initData_empty"; return false; }
-
-        foreach (var p in initData.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var i = p.IndexOf('=');
-            if (i <= 0) continue;
-            var k = Uri.UnescapeDataString(p[..i]);
-            var v = Uri.UnescapeDataString(p[(i + 1)..]);
-            data[k] = v;
-        }
-        if (!data.TryGetValue("hash", out hash) || string.IsNullOrWhiteSpace(hash))
-        {
-            error = "hash_missing";
-            return false;
-        }
-        return true;
-    }
-
-    public bool VerifyInitData(Dictionary<string, string> data, string hash, out string? error)
-    {
-        error = null;
-
-        // TTL: auth_date обязателен
-        if (!data.TryGetValue("auth_date", out var authDateStr) || !long.TryParse(authDateStr, out var auth))
-        {
-            error = "no_auth_date"; return false;
-        }
-        if (!CheckTtl(auth, _opt.AllowedClockSkewSeconds))
-        {
-            error = "stale_initData"; return false;
-        }
-
-        // secret = HMAC_SHA256("WebAppData", bot_token)
-        using var hmac1 = new HMACSHA256(Encoding.UTF8.GetBytes("WebAppData"));
-        var secret = hmac1.ComputeHash(Encoding.UTF8.GetBytes(_opt.BotToken));
-
-        var dataCheck = BuildDataCheckString(
-            data.Where(kv => !string.Equals(kv.Key, "hash", StringComparison.Ordinal))
-                .ToDictionary(k => k.Key, v => v.Value, StringComparer.Ordinal)
-        );
-
-        var calc = HmacHex(secret, dataCheck);
-        return ConstantTimeEquals(calc, hash);
-    }
-
     // ===== Helpers =====
     private static bool CheckTtl(long authUnix, int skewSeconds)
     {
