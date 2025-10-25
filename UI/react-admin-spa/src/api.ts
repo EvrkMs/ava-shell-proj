@@ -25,9 +25,8 @@ api.interceptors.response.use(
         try {
           await userManager.removeUser();
         } catch {
-          // ignore cleanup issues, browser reload clears state anyway
+          // ignore cleanup issues; auth context listens for unload events
         }
-        window.location.replace("/");
       }
     } catch {
       // ignore secondary failures

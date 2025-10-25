@@ -1,25 +1,22 @@
 import React, { useMemo } from "react";
-import { useSearchParams, Navigate } from "react-router-dom";
+import { useSearchParams, Navigate, useLocation } from "react-router-dom";
 import { Box, Button, Stack, Typography, Alert } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
-
-const KEY = "post_login_return_url";
+import { normalizeReturnPath, persistReturnPath } from "../utils/navigation";
 
 const Login: React.FC = () => {
   const { signinPkce, state, clearError } = useAuth();
   const [sp] = useSearchParams();
+  const location = useLocation();
 
   const returnUrl = useMemo(() => {
-    const v = sp.get("returnUrl");
-    try { 
-      return v ? decodeURIComponent(v) : "/"; 
-    } catch { 
-      return v || "/"; 
-    }
-  }, [sp]);
+    const queryParam = sp.get("returnUrl");
+    const fromState = (location.state as { from?: string } | null)?.from;
+    return normalizeReturnPath(fromState ?? queryParam ?? "/");
+  }, [sp, location.state]);
   
   const handleLogin = async () => {
-    sessionStorage.setItem(KEY, returnUrl);
+    persistReturnPath(returnUrl);
     await signinPkce();
   };
 

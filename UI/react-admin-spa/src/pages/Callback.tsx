@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { Alert, Box, CircularProgress, Typography } from "@mui/material";
-
-const STORAGE_KEY = "post_login_return_url";
+import { consumePersistedReturnPath, normalizeReturnPath } from "../utils/navigation";
 
 const Callback: React.FC = () => {
   const { completeSignin } = useAuth();
@@ -18,26 +17,9 @@ const Callback: React.FC = () => {
         await completeSignin();
         
         const sp = new URLSearchParams(window.location.search);
-        const savedUrl = sessionStorage.getItem(STORAGE_KEY);
-        const returnUrl = sp.get("returnUrl");
-        
-        let redirectTo = "/profile";
-        
-        if (savedUrl) {
-          try {
-            redirectTo = decodeURIComponent(savedUrl);
-          } catch {
-            redirectTo = savedUrl;
-          }
-        } else if (returnUrl) {
-          try {
-            redirectTo = decodeURIComponent(returnUrl);
-          } catch {
-            redirectTo = returnUrl;
-          }
-        }
-        
-        sessionStorage.removeItem(STORAGE_KEY);
+        const persisted = consumePersistedReturnPath();
+        const param = sp.get("returnUrl");
+        const redirectTo = persisted ?? normalizeReturnPath(param ?? "/profile");
         window.location.replace(redirectTo);
       } catch (e: any) {
         setError(e?.message || "Ошибка завершения входа");

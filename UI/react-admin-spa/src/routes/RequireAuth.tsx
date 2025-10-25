@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { Box, CircularProgress } from "@mui/material";
+import { normalizeReturnPath } from "../utils/navigation";
 
 interface RequireAuthProps {
   children: React.ReactNode;
@@ -21,8 +22,8 @@ export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
   }
 
   if (!state.isAuthenticated) {
-    const redirect = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/login?returnUrl=${redirect}`} replace />;
+    const returnPath = normalizeReturnPath(location.pathname + location.search + location.hash);
+    return <Navigate to="/login" state={{ from: returnPath }} replace />;
   }
 
   return <>{children}</>;

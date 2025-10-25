@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -31,6 +31,7 @@ import PasswordIcon from "@mui/icons-material/Password";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import { api } from "../../api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // Normalize API errors (handles ASP.NET Core ProblemDetails)
 function getApiErrorMessage(e: any): string {
@@ -75,12 +76,7 @@ type RoleDto = { id: string; name: string };
 const statusOptions: UserStatus[] = ["Active", "Inactive"];
 
 const Users: React.FC = () => {
-  // ---- list state
-  const [items, setItems] = useState<UserDto[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // ---- filters
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"" | UserStatus>("");
 
@@ -91,40 +87,44 @@ const Users: React.FC = () => {
   const [cPassword, setCPassword] = useState("");
   const [cStatus, setCStatus] = useState<UserStatus>("Active");
   const [cRoles, setCRoles] = useState<string[]>([]);
-  const [roles, setRoles] = useState<RoleDto[]>([]);
-  const [cBusy, setCBusy] = useState(false);
   const [cError, setCError] = useState<any>(null);
 
   // ---- change password dialog
   const [openPwd, setOpenPwd] = useState(false);
   const [pUser, setPUser] = useState<UserDto | null>(null);
   const [pPassword, setPPassword] = useState("");
-  const [pBusy, setPBusy] = useState(false);
   const [pError, setPError] = useState<any>(null);
 
-  // ---- snack
   const [snack, setSnack] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const sp = new URLSearchParams();
-      if (query.trim()) sp.set("query", query.trim());
-      if (status) sp.set("status", status);
-      const { data } = await api.get<UserDto[]>("/api/cruduser", { params: sp });
-      setItems(data);
-    } catch (e: any) {
-      setError(e?.response?.data ?? e?.message ?? "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const usersQuery = useQuery({
+    queryKey: ["users", { query, status }],
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("query", query.trim());
+      if (status) params.set("status", status);
+      const { data } = await api.get<UserDto[]>("/api/cruduser", { params, signal });
+      return data;
+    },
+  });
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const rolesQuery = useQuery({
+    queryKey: ["roles"],
+    queryFn: async () => {
+      const { data } = await api.get<RoleDto[]>("/api/cruduser/roles");
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const items = usersQuery.data ?? [];
+  const loading = usersQuery.isInitialLoading || usersQuery.isFetching;
+  const loadError = usersQuery.error as any;
+  const listError = loadError ? (loadError?.response?.data ?? loadError?.message ?? "Ошибка загрузки") : null;
+  const roles = rolesQuery.data ?? [];
+
+  const cBusy = createUserMutation.isPending;
+  const pBusy = changePasswordMutation.isPending;
 
   const filteredText = useMemo(() => {
     const parts: string[] = [];
@@ -141,16 +141,60 @@ const Users: React.FC = () => {
     setCStatus("Active");
     setCRoles([]);
     setCError(null);
-
-    try {
-      const { data } = await api.get<RoleDto[]>("/api/cruduser/roles");
-      setRoles(data);
-    } catch {
-      // без ролей тоже можно создать
-      setRoles([]);
-    }
+    if (!rolesQuery.data) await rolesQuery.refetch();
     setOpenCreate(true);
   };
+
+  const createUserMutation = useMutation({
+    mutationFn: async (payload: { userName: string; fullName: string; password: string; status: UserStatus; roles: string[] }) => {
+      const res = await api.post<UserDto>(
+        "/api/cruduser",
+        {
+          userName: payload.userName.trim(),
+          fullName: payload.fullName.trim(),
+          password: payload.password,
+          status: payload.status,
+          roles: payload.roles,
+        },
+        { validateStatus: (s) => s === 201, headers: { Accept: "application/json" } }
+      );
+
+      if (!res.data?.id) {
+        const loc = (res.headers as any)?.location ?? (res.headers as any)?.Location;
+        if (typeof loc === "string" && loc) {
+          try {
+            await api.get<UserDto>(loc);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    },
+    onSuccess: async () => {
+      setOpenCreate(false);
+      setSnack("Пользователь создан");
+      await queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: any) => {
+      setCError(err?.response?.data ?? err?.message ?? "Ошибка создания");
+    },
+    onSettled: () => {
+      setCPassword("");
+    }
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async (payload: { id: string; password: string; userName?: string }) => {
+      await api.post(`/api/cruduser/${payload.id}/password`, { newPassword: payload.password });
+    },
+    onSuccess: async (_, variables) => {
+      setOpenPwd(false);
+      setSnack(`Пароль для ${variables.userName ?? "пользователя"} обновлён`);
+      setPPassword("");
+      await queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: any) => setPError(err?.response?.data ?? err?.message ?? "Ошибка смены пароля"),
+  });
 
   const submitCreate = async () => {
     // простая фронт-валидация
@@ -158,43 +202,14 @@ const Users: React.FC = () => {
     if (cFullName.trim().length < 2) { setCError("ФИО: минимум 2 символа"); return; }
     if (cPassword.length < 6) { setCError("Пароль: минимум 6 символов"); return; }
 
-    setCBusy(true);
     setCError(null);
-    try {
-      // Expect 201 Created + body: UserListItemDto, header Location: /api/cruduser/{id}
-      const res = await api.post<UserDto>(
-        "/api/cruduser",
-        {
-          userName: cUserName.trim(),
-          fullName: cFullName.trim(),
-          password: cPassword,
-          status: cStatus,
-          roles: cRoles,
-        },
-        { validateStatus: (s) => s === 201, headers: { Accept: "application/json" } }
-      );
-
-      // Use body if present; otherwise, follow Location header
-      let created: UserDto | undefined = res.data;
-      if (!created?.id) {
-        const loc = (res.headers as any)["location"] ?? (res.headers as any)["Location"];
-        if (typeof loc === "string" && loc) {
-          try {
-            const { data } = await api.get<UserDto>(loc);
-            created = data;
-          } catch {
-            // ignore; we'll just reload the list below
-          }
-        }
-      }
-      setOpenCreate(false);
-      setSnack("Пользователь создан");
-      await load();
-    } catch (e: any) {
-      setCError(e?.response?.data ?? e?.message ?? "Ошибка создания");
-    } finally {
-      setCBusy(false);
-    }
+    await createUserMutation.mutateAsync({
+      userName: cUserName,
+      fullName: cFullName,
+      password: cPassword,
+      status: cStatus,
+      roles: cRoles,
+    });
   };
 
   // ---- password dialog
@@ -209,17 +224,8 @@ const Users: React.FC = () => {
     if (!pUser) return;
     if (pPassword.length < 6) { setPError("Пароль: минимум 6 символов"); return; }
 
-    setPBusy(true);
     setPError(null);
-    try {
-      await api.post(`/api/cruduser/${pUser.id}/password`, { newPassword: pPassword });
-      setOpenPwd(false);
-      setSnack(`Пароль для ${pUser.userName} изменён`);
-    } catch (e: any) {
-      setPError(e?.response?.data ?? e?.message ?? "Ошибка смены пароля");
-    } finally {
-      setPBusy(false);
-    }
+    await changePasswordMutation.mutateAsync({ id: pUser.id, password: pPassword, userName: pUser.userName });
   };
 
   return (
@@ -229,7 +235,7 @@ const Users: React.FC = () => {
         <Stack direction="row" spacing={1}>
           <Tooltip title="Обновить">
             <span>
-              <IconButton onClick={load} disabled={loading}><RefreshIcon /></IconButton>
+              <IconButton onClick={() => usersQuery.refetch()} disabled={loading}><RefreshIcon /></IconButton>
             </span>
           </Tooltip>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
@@ -268,7 +274,7 @@ const Users: React.FC = () => {
               <MenuItem key={s} value={s}>{s}</MenuItem>
             ))}
           </TextField>
-          <Button variant="outlined" onClick={load} disabled={loading} sx={{ minWidth: 140 }}>
+          <Button variant="outlined" onClick={() => usersQuery.refetch()} disabled={loading} sx={{ minWidth: 140 }}>
             {loading ? <CircularProgress size={20} /> : "Применить"}
           </Button>
         </Stack>
@@ -279,7 +285,7 @@ const Users: React.FC = () => {
         )}
       </Paper>
 
-      {error && <Alert severity="error">{String(error)}</Alert>}
+      {listError && <Alert severity="error">{String(listError)}</Alert>}
 
       <TableContainer component={Paper}>
         <Table size="small">

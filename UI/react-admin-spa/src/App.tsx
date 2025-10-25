@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Callback from "./pages/Callback";
 import LogoutCallback from "./pages/LogoutCallback";
 import Profile from "./pages/Profile/Profile";
+import Login from "./pages/Login";
 import { useAuth } from "./auth/AuthContext";
 import { AppBar, Box, Button, Container, IconButton, Toolbar, Typography, CircularProgress } from "@mui/material";
 import UpdatePrompt from "./components/UpdatePrompt";
@@ -12,6 +13,7 @@ import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import { ColorThemeContext } from "./theme/ColorThemeProvider";
 import { RequireAuth } from "./routes/RequireAuth";
+import { persistReturnPath } from "./utils/navigation";
 
 const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { state, signinPkce, signout } = useAuth();
@@ -33,7 +35,15 @@ const AppShell: React.FC<React.PropsWithChildren> = ({ children }) => {
               )}
 
               {!state.isAuthenticated ? (
-                <Button onClick={() => { try { sessionStorage.setItem("post_login_return_url", window.location.pathname + window.location.search + window.location.hash); } catch {} signinPkce(); }} color="inherit">Войти</Button>
+                <Button
+                  onClick={() => {
+                    persistReturnPath(window.location.pathname + window.location.search + window.location.hash);
+                    signinPkce();
+                  }}
+                  color="inherit"
+                >
+                  Войти
+                </Button>
               ) : (
                 <Button onClick={signout} color="inherit">Выйти</Button>
               )}
@@ -71,6 +81,7 @@ const App: React.FC = () => {
     <AppShell>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
 
         {/* OIDC callbacks */}
         <Route path="/callback" element={<Callback />} />

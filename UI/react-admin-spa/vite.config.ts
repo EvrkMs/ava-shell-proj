@@ -14,10 +14,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      // Включить SW в dev для теста (можно выключить потом)
       devOptions: {
-        enabled: true,           // true — SW будет работать на dev-сервере
-        type: "module",
+        enabled: false,
       },
       includeAssets: [
         "favicon.svg",
@@ -66,26 +64,6 @@ export default defineConfig({
               expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365, purgeOnQuotaError: true },
             },
           },
-          // Картинки — Cache First
-          {
-            urlPattern: ({ request }) => request.destination === "image",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "images",
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
-            },
-          },
-          // Тайлы для карт (OSM / Carto) — Cache First, ограничение
-          {
-            urlPattern:
-              /^(https:\/\/[abc]\.tile\.openstreetmap\.org\/|https:\/\/[a-d]\.basemaps\.cartocdn\.com\/)/,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "map-tiles",
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 3, purgeOnQuotaError: true },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
           // API (приватное) — не кэшируем
           { 
             urlPattern: /^https:\/\/auth\.ava-kk\.ru\/api\//, 
@@ -121,17 +99,9 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
-    allowedHosts: ["admin.ava-kk.ru"],
-    hmr: {
-      host: "admin.ava-kk.ru",
-      clientPort: 443, // если front открыт по HTTPS
-      protocol: "wss",
-      path: "/hmr",
-    },
   },
-  
-  // Настройки для SPA и iframe
-  base: './',
+
+  base: '/',
   
   // Дополнительные настройки для iframe
   define: {
