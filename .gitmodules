@@ -1,0 +1,7 @@
+[submodule "ComputerAdminAuth"]
+    path = ComputerAdminAuth
+    url = git@github.com:EvrkMs/ComputerAdminAuth.git
+
+[submodule "Safe.Service"]
+    path = Safe.Service
+    url = git@github.com:EvrkMs/Safe.Service.git
