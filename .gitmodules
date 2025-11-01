@@ -1,11 +1,11 @@
 [submodule "ComputerAdminAuth"]
-    path = ComputerAdminAuth
-    url = https://github.com/EvrkMs/ComputerAdminAuth.git
+	path = ComputerAdminAuth
+	url = https://github.com/EvrkMs/ComputerAdminAuth.git
 
 [submodule "Safe.Service"]
-    path = Safe.Service
-    url = https://github.com/EvrkMs/Safe.Service.git
+	path = Safe.Service
+	url = https://github.com/EvrkMs/Safe.Service.git
 
 [submodule "computeradmin-ui"]
-    path = computeradmin-ui
-    url = https://github.com/EvrkMs/computeradmin-ui.git
+	path = computeradmin-ui
+	url = https://github.com/EvrkMs/computeradmin-ui.git
