@@ -5,3 +5,7 @@
 [submodule "Safe.Service"]
     path = Safe.Service
     url = git@github.com:EvrkMs/Safe.Service.git
+
+[submodule "computeradmin-ui"]
+    path = Safe.Service
+    url = git@github.com:EvrkMs/computeradmin-ui.git
