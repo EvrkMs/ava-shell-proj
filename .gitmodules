@@ -9,3 +9,6 @@
 [submodule "computeradmin-ui"]
 	path = computeradmin-ui
 	url = https://github.com/EvrkMs/computeradmin-ui.git
+[submodule "Auth.TokenValidation"]
+	path = Auth.TokenValidation
+	url = https://github.com/EvrkMs/Auth.TokenValidation
