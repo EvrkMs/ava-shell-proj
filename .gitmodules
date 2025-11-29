@@ -10,3 +10,8 @@
 	path = computeradmin-ui
 	url = https://github.com/EvrkMs/computeradmin-ui.git
 	
+
+[submodule "Auth.Service"]
+	path = Auth.Service
+	url = https://github.com/EvrkMs/Auth.Service.git
+	
