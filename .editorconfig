@@ -1,0 +1,4 @@
+root = true
+
+[*.cs]
+dotnet_remove_unnecessary_usings = true
